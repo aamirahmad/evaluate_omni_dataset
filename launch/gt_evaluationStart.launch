@@ -1,3 +1,3 @@
 <launch>
-<node name="evaluate_omni_dataset" pkg="evaluate_omni_dataset" type="evaluate_omni_dataset" args="$(find gt_evaluation)/resources/ /store/DataSet_Lisbon/GT_Images/4_Robot_Exp/Right/" output="screen" />
+<node name="evaluate_omni_dataset" pkg="evaluate_omni_dataset" type="evaluate_omni_dataset" args="/store/DataSet_Lisbon/GT_Images/4_Robot_Exp/Right/" output="screen" />
 </launch>

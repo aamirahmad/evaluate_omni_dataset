@@ -21,22 +21,21 @@ find_package(OpenCV REQUIRED)
 INCLUDE_DIRECTORIES(${catkin_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  RobotState.msg
-)
+# add_message_files(
+#   FILES
+# )
 
-generate_messages(
-  DEPENDENCIES
-  std_msgs
-  geometry_msgs     
-  nav_msgs
-)
+# generate_messages(
+#   DEPENDENCIES
+#   std_msgs
+#   geometry_msgs     
+#   nav_msgs
+# )
 
 catkin_package(
 #  INCLUDE_DIRS include
 #  CATKIN_DEPENDS roscpp rospy
-CATKIN_DEPENDS roscpp rospy message_runtime
+#  CATKIN_DEPENDS roscpp rospy message_runtime
 #  DEPENDS system_lib
 )
 

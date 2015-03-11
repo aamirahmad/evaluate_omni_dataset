@@ -1,17 +1,14 @@
 #include <cstdio>
 #include <iostream>
 #include <string>
-
 #include "ros/ros.h"
 #include <rosbag/bag.h>
 #include "std_msgs/String.h"
 #include "std_msgs/Float32.h"
-
 #include <sensor_msgs/Image.h>
 // #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <tf/transform_broadcaster.h>
-
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -20,55 +17,74 @@
 #include <read_omni_dataset/BallData.h>
 #include <read_omni_dataset/LRMLandmarksData.h>
 #include <read_omni_dataset/LRMGTData.h>
-#include <evaluate_omni_dataset/RobotState.h>
+#include <read_omni_dataset/RobotState.h>
 
 
 using namespace cv;
 using namespace std;
 using namespace ros;
 
+// Dataset related constants
 
-const std::size_t NUM_ROBOTS = 5;
+///@INFO In truth we have only 4 robots in the dataset but since the robot IDs go upto 5, we will keep a phantom robot: OMNI2
+const std::size_t NUM_ROBOTS = 5;  
+///@INFO In truth we have 2 targets in the raw dataset but the 'pre-processed' data does not contain the measurements of the blue ball from the robots (we have that only for the orange ball). However, extend this to 2 in case you do your own pre-processing for the blue ball measurements using the raw images from the robot's camera. Check raw dataset details for other related params to perform this measurement
 const std::size_t NUM_TARGETS = 1;
-//Right Camera PARAMETERS (CALIBRATED FROM BEFORE)
-/*** Intrinsic Parameters********/
-  // LRM new GT system (ethernet)
-  //Left camera
-  double M1[] = {952.364130338909490,0,638.552089454614702, 0,953.190083002521192,478.055570057081638, 0,0,1};
-  double D1[] = {-0.239034777360406 , 0.099854524375872 , -0.000493227284393 , 0.000055426659564 , 0.000000000000000 };  
-  
-  //Right Camera
-  double M2[] = {949.936867662258351,0,635.037661574667936,0,951.155555785186380,482.586148439616579 ,0,0,1};
-  double D2[] = { -0.243312251484708 , 0.107447328223015 , -0.000324393194744 , -0.000372030056928 , 0.000000000000000 };
 
-  static const int circlePointsPerPosition = 50;
-  static const int targetPntsPos = 1;
-  static const int arrowPointsPerPosition = 20;
-  static const int totPntsPerPos = 1 + circlePointsPerPosition + arrowPointsPerPosition;
-  static const int totPntsPerPosGT = 1 + circlePointsPerPosition;
-  static const float robRadius = 0.20; //in meters
-  
+/******** Intrinsic Parameters ********/
+/******** !!!!DO NOT MODIFY!!! ********/
+
+///@INFO The params below are of the individual cameras of the GT camera system.
+///@INFO Extrinsic stere calibration is performed on the fly (to avoid carrying a lot of xml files and make this code more portable) and called at the beginning of this node. Check method initializeCamParams()
+
+//Left camera
+double M1[] = {952.364130338909490,0,638.552089454614702, 0,953.190083002521192,478.055570057081638, 0,0,1};
+double D1[] = {-0.239034777360406 , 0.099854524375872 , -0.000493227284393 , 0.000055426659564 , 0.000000000000000 };  
+
+//Right Camera
+double M2[] = {949.936867662258351,0,635.037661574667936,0,951.155555785186380,482.586148439616579 ,0,0,1};
+double D2[] = { -0.243312251484708 , 0.107447328223015 , -0.000324393194744 , -0.000372030056928 , 0.000000000000000 };
+
+// Some constants for drawing funcions... change these values if you want more points on the overlaid circle... an so on
+static const int circlePointsPerPosition = 50;
+static const int targetPntsPos = 1;
+static const int arrowPointsPerPosition = 20;
+static const int totPntsPerPos = 1 + circlePointsPerPosition + arrowPointsPerPosition;
+static const int totPntsPerPosGT = 1 + circlePointsPerPosition;
+
+// Some fixed omni robot-specific constants 
+static const float robRadius = 0.20; //in meters
+static const float robHeight = 0.805; //in meters  
   
   
 class ImageOverlayer
 {
-  IplImage img; 
-  
+  //ROS node specific private stuff
+  NodeHandle n; 
+  Subscriber Image_sub,omni_sub, target1_sub;
+  Publisher errorPublisherOMNI1,errorPublisherOMNI3,errorPublisherOMNI4,errorPublisherOMNI5;
+  Publisher orangeBallError;
+  //Main image
+  IplImage img;   
   char imagePathNameBaseName[100];
+  
+  //Estimated states
   geometry_msgs::PoseWithCovarianceStamped robot_state[NUM_ROBOTS];
   geometry_msgs::PoseWithCovarianceStamped target_state[NUM_TARGETS];
   bool robotActive[NUM_ROBOTS];
   bool targetActive[NUM_TARGETS];
   
-  NodeHandle n; 
-  Subscriber Image_sub,omni_sub, target1_sub;
-  
-  Publisher errorPublisherOMNI1,errorPublisherOMNI3,errorPublisherOMNI4,errorPublisherOMNI5;
-  
+  // GT Stereo system calibration params
+  CvMat _M1;
+  CvMat _D1;  
   CvMat _M2;
   CvMat _D2;
   CvMat* Tvec_right;
   CvMat* Rvec_right_n;
+  CvMat* Tvec_left;
+  CvMat* Rvec_left_n;  
+  
+  //Groud Truth (GT) poses and positions using custom ROS msgs
   CvScalar color_est[6];
   geometry_msgs::PoseWithCovariance omniGTPose[5];
   bool foundOMNI_GT[5];
@@ -76,37 +92,31 @@ class ImageOverlayer
   
   
   public:
-    
-    ImageOverlayer(char *camParamsPath, char *camImageFolderPath)
+    ImageOverlayer(char *camImageFolderPath)
     {
      
      strcpy(imagePathNameBaseName,camImageFolderPath); 
       
-     cvNamedWindow("Grount Truth Images: Right Camera"); 
+     cvNamedWindow("Overlaid Estimates on the Grount Truth Images of Right GT Camera"); 
      
-     //Image_sub = n.subscribe<read_omni_dataset::LRMGTData>("gtData_4robotExp", 1000, boost::bind(&ImageOverlayer::gtDataCallback,this,_1,&img)); 
+     //Don't change the topic of this subscriber. It is the topic from GT ROSbags.
+     Image_sub = n.subscribe<read_omni_dataset::LRMGTData>("gtData_4robotExp", 1000, boost::bind(&ImageOverlayer::gtDataCallback,this,_1,&img)); 
      
-     Image_sub = n.subscribe<read_omni_dataset::LRMGTData>("gtData_4robotExp_SyncedWithg2oEstimate", 1000, boost::bind(&ImageOverlayer::gtDataCallback,this,_1,&img)); 
+     //Use your own topic name here for the estimated (from another estimation algorithm) poses of the omnis The idea is to compare (and find the error) these estimated omni poses with the above GT poses. However make sure that the received message is packed according to the custom ROS msg RobotState provided with this package.
+     omni_sub = n.subscribe<read_omni_dataset::RobotState>("estimated_omni_poses", 1000, boost::bind(&ImageOverlayer::omniCallback,this,_1,&img));  
      
-     omni_sub = n.subscribe<evaluate_omni_dataset::RobotState>("mhls_omni_poses", 1000, boost::bind(&ImageOverlayer::omniCallback,this,_1,&img));  
+     //Estimated ball poses: the idea, again, is to compare it with the ball GT poses. Same as robots, you can use your own topic name but the ros msg type should be the custom ROSmsg BallData.
+     target1_sub = n.subscribe<read_omni_dataset::BallData>("estimatedOrangeBallState", 1000, boost::bind(&ImageOverlayer::target1Callback,this,_1,&img));
      
-     target1_sub = n.subscribe<read_omni_dataset::BallData>("orangeBallEstimatedState", 1000, boost::bind(&ImageOverlayer::target1Callback,this,_1,&img));
-     
+     //On these topics the eindividual errors in estimation is published
      errorPublisherOMNI1 = n.advertise<std_msgs::Float32>("/omni1EstimationError", 1000);
      errorPublisherOMNI3 = n.advertise<std_msgs::Float32>("/omni3EstimationError", 1000);
      errorPublisherOMNI4 = n.advertise<std_msgs::Float32>("/omni4EstimationError", 1000);
      errorPublisherOMNI5 = n.advertise<std_msgs::Float32>("/omni5EstimationError", 1000);
-
-     initializeCamParams();
+     orangeBallError = n.advertise<std_msgs::Float32>("/OrangeBallEstimationError", 1000);
      
-     if (!Tvec_right || !Rvec_right_n)
-      {
-	  ROS_WARN("!!! cvLoad failed... overlaying on gt system will not work");
-      }
-      else
-      {
-	  ROS_INFO(" cam params loaded... overlaying should work");
-      }
+     // Stereo cam calibration. Done only once in the beginning
+     initializeCamParams();
      
      //change these to alter colors of the robots estimated state representation
      color_est[0] = cvScalar(0.0, 50.0, 255.0);
@@ -115,8 +125,9 @@ class ImageOverlayer
      color_est[3] = cvScalar(147.0, 20.0, 255.0);
      color_est[4] = cvScalar(255.0, 50.0, 0.0);
      color_est[5] = cvScalar(100.0, 100.2, 250.1);
-     foundOMNI_GT[0] = false;foundOMNI_GT[1] = false;foundOMNI_GT[2] = false;foundOMNI_GT[3] = false;foundOMNI_GT[4] = false;
      
+     //some bool initialization
+     foundOMNI_GT[0] = false;foundOMNI_GT[1] = false;foundOMNI_GT[2] = false;foundOMNI_GT[3] = false;foundOMNI_GT[4] = false;     
      for(int i = 0; i<NUM_ROBOTS; i++)
 	robotActive[i] = false;
     }
@@ -126,7 +137,7 @@ class ImageOverlayer
     void gtDataCallback(const read_omni_dataset::LRMGTData::ConstPtr& , IplImage* );
     
     ///callback that keeps updating the most recent robot poses for omnis when it receives this info from the omni_g2o_frontend
-    void omniCallback(const evaluate_omni_dataset::RobotState::ConstPtr& , IplImage* );
+    void omniCallback(const read_omni_dataset::RobotState::ConstPtr& , IplImage* );
     
     ///callback that keeps updating the most recent target pose for target 1 (orange ball) when it receives this info from the omni_g2o_frontend
     void target1Callback(const read_omni_dataset::BallData::ConstPtr& , IplImage* );    
@@ -146,6 +157,3 @@ class ImageOverlayer
     ///Overlay the colored circle for the GT target pose
     void OverlayGTTargetPosition(double, double, double, CvScalar, IplImage* baseImage);    
 };
-
-
-

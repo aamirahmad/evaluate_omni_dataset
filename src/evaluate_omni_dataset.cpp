@@ -1,5 +1,28 @@
 #include "evaluate_omni_dataset.h"
 
+inline void getActualShift(int i, double* shift_a_, double* shift_b_)
+{
+     
+    if(i==0)
+    {
+      *shift_a_ = 0.098947; *shift_b_ = 0.02391;
+    }
+    if(i==2)
+    {
+      *shift_a_ = 0.153636; *shift_b_ = 0.025022;
+    }
+    if(i==3)
+    {
+      *shift_a_ = 0.061141; *shift_b_ = 0.0272;
+    }
+    if(i==4)
+    {
+      *shift_a_ = 0.102613; *shift_b_ = 0.01631;
+    }    
+   
+}
+
+
 void ImageOverlayer::initializeCamParams()
 {
   int nframes=1;
@@ -19,9 +42,9 @@ void ImageOverlayer::initializeCamParams()
 
 /*************************************************************/    
     
-  CvMat _M1 = cvMat(3, 3, CV_64F, M1 );
+   _M1 = cvMat(3, 3, CV_64F, M1 );
    _M2 = cvMat(3, 3, CV_64F, M2 );
-  CvMat _D1 = cvMat(1, 5, CV_64F, D1 );
+   _D1 = cvMat(1, 5, CV_64F, D1 );
    _D2 = cvMat(1, 5, CV_64F, D2 );
   CvMat _R = cvMat(3, 3, CV_64F, R );
   CvMat _T = cvMat(3, 1, CV_64F, T );
@@ -123,13 +146,13 @@ void ImageOverlayer::initializeCamParams()
 
 /***************************************** Extrinsic Parameters **********************************************************/
   CvMat* Rvec_left = cvCreateMat( 3, 1, CV_64F );
-  CvMat* Tvec_left = cvCreateMat( 3, 1, CV_64F );
+  Tvec_left = cvCreateMat( 3, 1, CV_64F );
   CvMat* Rvec_right = cvCreateMat( 3, 1, CV_64F );
   Tvec_right = cvCreateMat( 3, 1, CV_64F ); 
   
   cvFindExtrinsicCameraParams2(&_objectPoints, &_imagePoints1,&_M1,&_D1,Rvec_left,Tvec_left);
   
-  CvMat* Rvec_left_n = cvCreateMat( 3, 3, CV_64F );
+  Rvec_left_n = cvCreateMat( 3, 3, CV_64F );
   cvRodrigues2(Rvec_left,Rvec_left_n,0);
     
 
@@ -165,6 +188,7 @@ void ImageOverlayer::OverlayGTTargetPosition(double x, double y, double z, CvSca
 }
 
 
+// This function is redundant... merge it with the previous one!
 void ImageOverlayer::OverlayEstimatedTargetPosition(double x, double y, double z, CvScalar color, IplImage* baseImage)
 {
    vector<CvPoint3D32f> Target_PositionsToReProject;
@@ -174,38 +198,36 @@ void ImageOverlayer::OverlayEstimatedTargetPosition(double x, double y, double z
    
    Target_PositionsToReProject[0] = cvPoint3D32f(x,y,z);
    
-    vector<CvPoint2D32f> reprojectedPoints_Target;
-    reprojectedPoints_Target.resize(targetPntsPos);
+   vector<CvPoint2D32f> reprojectedPoints_Target;
+   reprojectedPoints_Target.resize(targetPntsPos);
     
-    CvMat _imageReprojectedPoints_TargetRight = cvMat(1, targetPntsPos, CV_32FC2, &reprojectedPoints_Target[0]);
-    
-    cvProjectPoints2(&_Target_PositionsToReProject, Rvec_right_n, Tvec_right, &_M2, &_D2, &_imageReprojectedPoints_TargetRight, NULL, NULL, NULL, NULL, NULL); 
-   
- 
-    CvPoint target_PointToBeShownRight = cvPoint(reprojectedPoints_Target[0].x,reprojectedPoints_Target[0].y);
-    cvCircle(baseImage, target_PointToBeShownRight, 20, color, 2, 8, 0);       	
+   CvMat _imageReprojectedPoints_TargetRight = cvMat(1, targetPntsPos, CV_32FC2, &reprojectedPoints_Target[0]);
+  
+   cvProjectPoints2(&_Target_PositionsToReProject, Rvec_right_n, Tvec_right, &_M2, &_D2, &_imageReprojectedPoints_TargetRight, NULL, NULL, NULL, NULL, NULL); 
+  
+   CvPoint target_PointToBeShownRight = cvPoint(reprojectedPoints_Target[0].x,reprojectedPoints_Target[0].y);
+   cvCircle(baseImage, target_PointToBeShownRight, 20, color, 2, 8, 0);       	
       
 }
 
 
-
-
 void ImageOverlayer::OverlayEstimatedRobotPose(double x, double y, double z, double thetaRob, CvScalar color, IplImage* baseImage)
 {
+   
    vector<CvPoint3D32f> Robot_PositionsToReProject;
    Robot_PositionsToReProject.resize(totPntsPerPos);
    
    CvMat _Robot_PositionsToReProject = cvMat(1, totPntsPerPos, CV_32FC3, &Robot_PositionsToReProject[0]);    
    
-   Robot_PositionsToReProject[0] = cvPoint3D32f(x,y,0.805);
+   Robot_PositionsToReProject[0] = cvPoint3D32f(x,y,robHeight);
     for(int pts = 0; pts < circlePointsPerPosition; pts++) //circlePointsPerPosition points out of totPntsPerPos for circle
     {
       float theta = -M_PI + (float)pts*2*M_PI/(circlePointsPerPosition);  
-      Robot_PositionsToReProject[1 + pts] = cvPoint3D32f( x + robRadius*cosf(theta), y + robRadius*sinf(theta), 0.805);
+      Robot_PositionsToReProject[1 + pts] = cvPoint3D32f( x + robRadius*cosf(theta), y + robRadius*sinf(theta), robHeight);
     }
     for(int pts = 0; pts < arrowPointsPerPosition; pts++) //arrowPointsPerPosition points out of totPntsPerPos for th arrow
     {
-      Robot_PositionsToReProject[1 + circlePointsPerPosition + pts] = cvPoint3D32f( x + (float)pts*(robRadius/(float)arrowPointsPerPosition)*cosf(thetaRob), y + (float)pts*(robRadius/(float)arrowPointsPerPosition)*sinf(thetaRob), 0.805);
+      Robot_PositionsToReProject[1 + circlePointsPerPosition + pts] = cvPoint3D32f( x + (float)pts*(robRadius/(float)arrowPointsPerPosition)*cosf(thetaRob), y + (float)pts*(robRadius/(float)arrowPointsPerPosition)*sinf(thetaRob), robHeight);
     }
    
     vector<CvPoint2D32f> reprojectedPoints_Robot;
@@ -231,17 +253,17 @@ void ImageOverlayer::OverlayGTRobotPose(double x, double y, double z, CvScalar c
    
    CvMat _Robot_PositionsToReProject = cvMat(1, totPntsPerPosGT, CV_32FC3, &Robot_PositionsToReProject[0]);    
    
-   Robot_PositionsToReProject[0] = cvPoint3D32f(x,y,0.805);
+   Robot_PositionsToReProject[0] = cvPoint3D32f(x,y,robHeight);
     for(int pts = 0; pts < circlePointsPerPosition; pts++) //circlePointsPerPosition points out of totPntsPerPosGT for circle
     {
       float theta = -M_PI + (float)pts*2*M_PI/(circlePointsPerPosition);  
-      Robot_PositionsToReProject[1 + pts] = cvPoint3D32f( x + robRadius*cosf(theta), y + robRadius*sinf(theta), 0.805);
+      Robot_PositionsToReProject[1 + pts] = cvPoint3D32f( x + robRadius*cosf(theta), y + robRadius*sinf(theta), robHeight);
     }
     
-    //orientation GT is not available for now
+    //orientation GT is not available for now hence this part is commented out.
     //     for(int pts = 0; pts < arrowPointsPerPosition; pts++) //arrowPointsPerPosition points out of totPntsPerPosGT for th arrow
     //     {
-    //       Robot_PositionsToReProject[1 + circlePointsPerPosition + pts] = cvPoint3D32f( x + (float)pts*(robRadius/(float)arrowPointsPerPosition)*cosf(thetaRob), y + (float)pts*(robRadius/(float)arrowPointsPerPosition)*sinf(thetaRob), 0.805);
+    //       Robot_PositionsToReProject[1 + circlePointsPerPosition + pts] = cvPoint3D32f( x + (float)pts*(robRadius/(float)arrowPointsPerPosition)*cosf(thetaRob), y + (float)pts*(robRadius/(float)arrowPointsPerPosition)*sinf(thetaRob), robHeight);
     //     }
     vector<CvPoint2D32f> reprojectedPoints_Robot;
     reprojectedPoints_Robot.resize(totPntsPerPosGT);
@@ -251,14 +273,14 @@ void ImageOverlayer::OverlayGTRobotPose(double x, double y, double z, CvScalar c
     cvProjectPoints2(&_Robot_PositionsToReProject, Rvec_right_n, Tvec_right, &_M2, &_D2, &_imageReprojectedPoints_RobotRight, NULL, NULL, NULL, NULL, NULL); 
    
     
+    //GT for all robots (and the ball) is painted black.
     for(int pts = 0; pts < totPntsPerPosGT; pts++)
       {    
 	CvPoint robot_PointToBeShownRight = cvPoint(reprojectedPoints_Robot[pts].x,reprojectedPoints_Robot[pts].y);
-	cvCircle(baseImage, robot_PointToBeShownRight, 0, cvScalar(0.0, 0.0, 0.0), 2, 8, 0);  
-	
+	cvCircle(baseImage, robot_PointToBeShownRight, 0, cvScalar(0.0, 0.0, 0.0), 2, 8, 0);
       }
       
-   //Put the sequenceNo on top of the image;
+   //Put the imgage sequenceNo on top of the image;
    CvFont fontLegend;
    double hScaleLegend=1.0;
    double vScaleLegend=1.0;
@@ -271,196 +293,179 @@ void ImageOverlayer::OverlayGTRobotPose(double x, double y, double z, CvScalar c
 }
 
 
-
 void ImageOverlayer::gtDataCallback(const read_omni_dataset::LRMGTData::ConstPtr& msg, IplImage* img_)
 {
-  string imageFile = msg->RightFilename; 
-  //cout<<"filename = "<<imageFile<<endl;
+   
+  
+  // unpack the message into local variables
+  
+  string imageFile = msg->RightFilename;
+  
   omniGTPose[0] = msg->poseOMNI1;
   omniGTPose[2] = msg->poseOMNI3;
   omniGTPose[3] = msg->poseOMNI4;
   omniGTPose[4] = msg->poseOMNI5;
+  targetGTPosition[0] = msg->orangeBall3DGTposition;
+  
   foundOMNI_GT[0] = msg->foundOMNI1;
   foundOMNI_GT[2] = msg->foundOMNI3;
   foundOMNI_GT[3] = msg->foundOMNI4;
   foundOMNI_GT[4] = msg->foundOMNI5;
-  targetGTPosition[0] = msg->orangeBall3DGTposition;
   //ROS_INFO("I heard: %s", imageFile.c_str());
   
   char imagePathName[100];
   strcpy(imagePathName,imagePathNameBaseName);
   strcat(imagePathName,imageFile.c_str());
-  char imageDestName[100];
-  strcpy(imageDestName,"/home/aamir/DataSet_Lisbon/GT_Images/4_Robot_Exp/N_9_Right/");
-  strcat(imageDestName,imageFile.c_str());
-  cout<<"filename = "<<imageDestName<<endl;
-  
-  //printf("%s\n",imagePathName);
   
   img_=cvLoadImage(imagePathName);
   
+  ///@INFO The robot GT positions are basically the positions of the colored marker's center placed on the robot. This does not exactly match the robot's center of mass. There is a fixed translational shift, obtained as follows. The robot is manually placed at a fixed coordinate on the ground using a plummet hanging from the CM and touching the point. Then, the GT pose of the center of the marker is obtained (which obviously did not match the position of the fixed coordinate on which the robot was placed). Obtaining the translation is then a piece of cake! 
+  double shift_a=0.0,shift_b=0.0;
   
+  //Overlay robot poses
   for(int i = 0; i<NUM_ROBOTS; i++)
   {
+    getActualShift(i,&shift_a, &shift_b);
     if(robotActive[i] || foundOMNI_GT[i])
     {
-     //ROS_INFO("OMNI1 is at x = %f , y = %f, theta = %f", robot_state[i].pose.pose.position.x,robot_state[i].pose.pose.position.y,2*acos(robot_state[i].pose.pose.orientation.w));   
-     
-    double thetaRob = 2*asin(robot_state[i].pose.pose.orientation.z);
-    double shift_a=0.0,shift_b=0.0;
-    
-    if(i==0)
-    {
-      shift_a = 0.098947; shift_b = 0.02391;
-    }
-    if(i==2)
-    {
-      shift_a = 0.153636; shift_b = 0.025022;
-    }
-    if(i==3)
-    {
-      shift_a = 0.061141; shift_b = 0.0272;
-    }
-    if(i==4)
-    {
-      shift_a = 0.102613; shift_b = 0.01631;
-    }    
-   
-    double tempPosX = robot_state[i].pose.pose.position.x; 
-    double tempPosY = robot_state[i].pose.pose.position.y; 
-    double tempPosTheta = thetaRob;
+      double thetaRob = 2*asin(robot_state[i].pose.pose.orientation.z); // the robot is on 2d plane so only YAW
+      double tempPosX = robot_state[i].pose.pose.position.x; 
+      double tempPosY = robot_state[i].pose.pose.position.y; 
+      double tempPosTheta = thetaRob;
   
-    double realX = tempPosX + shift_a*cosf(tempPosTheta) - shift_b*sinf(tempPosTheta);
-    double realY = tempPosY + shift_a*sinf(tempPosTheta) + shift_b*cosf(tempPosTheta);
+      double realEstimatedX = tempPosX + shift_a*cosf(tempPosTheta) - shift_b*sinf(tempPosTheta);
+      double realEstimatedY = tempPosY + shift_a*sinf(tempPosTheta) + shift_b*cosf(tempPosTheta);
     
-    OverlayEstimatedRobotPose(realX,realY,robot_state[i].pose.pose.position.z,thetaRob,color_est[i],img_); 
-    vector<CvPoint3D32f> OMNI4_status;
-    OMNI4_status.resize(1); 
+      OverlayEstimatedRobotPose(realEstimatedX,realEstimatedY,robot_state[i].pose.pose.position.z,thetaRob,color_est[i],img_); 
       
-    CvMat _OMNI4_status = cvMat(1, 1, CV_32FC3, &OMNI4_status[0]);    
-    OMNI4_status[0] = cvPoint3D32f( realX,realY,1.00);      
-    
-    vector<CvPoint2D32f> reprojectedOMNI4_status;
-    reprojectedOMNI4_status.resize(1);
-      
-    CvMat _reprojectedOMNI4_status = cvMat(1, 1, CV_32FC2, &reprojectedOMNI4_status[0]);  
 
-    cvProjectPoints2(&_OMNI4_status, Rvec_right_n, Tvec_right, &_M2, &_D2, &_reprojectedOMNI4_status, NULL, NULL, NULL, NULL, NULL);  
+      //Finding the pixels a few centimeter above the robot's estimated position to overlay the robot name "OMNI 1", or so on.
+      vector<CvPoint3D32f> OMNI_status;
+      OMNI_status.resize(1); 
+      
+      CvMat _OMNI_status = cvMat(1, 1, CV_32FC3, &OMNI_status[0]);    
+      OMNI_status[0] = cvPoint3D32f( realEstimatedX,realEstimatedY,1.00);      
+    
+      vector<CvPoint2D32f> reprojectedOMNI_status;
+      reprojectedOMNI_status.resize(1);
+      
+      CvMat _reprojectedOMNI_status = cvMat(1, 1, CV_32FC2, &reprojectedOMNI_status[0]);  
+      cvProjectPoints2(&_OMNI_status, Rvec_right_n, Tvec_right, &_M2, &_D2, &_reprojectedOMNI_status, NULL, NULL, NULL, NULL, NULL);  
   
-
-    CvFont font;
-    double hScale=1.0;
-    double vScale=1.0;
-    int    lineWidth=1;
-    cvInitFont(&font,CV_FONT_HERSHEY_SIMPLEX|CV_FONT_NORMAL, hScale,vScale,2,lineWidth);
+      CvFont font;
+      double hScale=1.0;
+      double vScale=1.0;
+      int lineWidth=1;
+      cvInitFont(&font,CV_FONT_HERSHEY_SIMPLEX|CV_FONT_NORMAL, hScale,vScale,2,lineWidth);
     
+      double errorX = fabs(omniGTPose[i].pose.position.x-realEstimatedX);
+      double errorY = fabs(omniGTPose[i].pose.position.y-realEstimatedY);
+      double error_ecldn = pow(errorX*errorX + errorY*errorY,0.5);
     
-
-    
-    double errorX = fabs(omniGTPose[i].pose.position.x-realX);
-    double errorY = fabs(omniGTPose[i].pose.position.y-realY);
-    double rms = pow(errorX*errorX + errorY*errorY,0.5);
-    
+      ///@INFO For each robot below, the error gets published. However, as the GT positions are not present for many time chunks due to occlusions from the GT cameras , we manually/visually inspected each GT image and the positions and noted the image intervas where the GT is absent. Hence, the magic numbers below! 
       if(i==0)
       {
 	std_msgs::Float32 error_msg;
 	//error_msg.header.stamp = msg->header.stamp;
-	error_msg.data = rms;
+	error_msg.data = error_ecldn;
 	errorPublisherOMNI1.publish(error_msg);
+	
 	if( (msg->header.seq<1570) || (msg->header.seq>=1607  && msg->header.seq<=2870 ) || (msg->header.seq>=3336  && msg->header.seq<=3800 ) || (msg->header.seq>=3816  && msg->header.seq<=5030) || (msg->header.seq>=5197  && msg->header.seq<=5870 ) )    OverlayGTRobotPose(omniGTPose[i].pose.position.x,omniGTPose[i].pose.position.y,omniGTPose[i].pose.position.z,cvScalar(0.0, 0.0, 0.0),img_,msg->header.seq);
-	cvPutText(img_,"Robot 3", cvPoint(reprojectedOMNI4_status[0].x-70,reprojectedOMNI4_status[0].y), &font, cvScalar(0.0, 50.0, 255.0));	
-
+	cvPutText(img_,"OMNI 3", cvPoint(reprojectedOMNI_status[0].x-70,reprojectedOMNI_status[0].y), &font, cvScalar(0.0, 50.0, 255.0));	
       }
       if(i==2)
       {
 	std_msgs::Float32 error_msg;
 	//error_msg.header.stamp = msg->header.stamp;
-	error_msg.data = rms;
+	error_msg.data = error_ecldn;
 	errorPublisherOMNI3.publish(error_msg);
-	if( (msg->header.seq<1500) || (msg->header.seq>=2871  && msg->header.seq<=2950 ) || (msg->header.seq>=3006  && msg->header.seq<=3750 ) || (msg->header.seq>=3797  && msg->header.seq<=4260) || (msg->header.seq>=5442  && msg->header.seq<=5540 ) || (msg->header.seq>5567))    OverlayGTRobotPose(omniGTPose[i].pose.position.x,omniGTPose[i].pose.position.y,omniGTPose[i].pose.position.z,cvScalar(0.0, 0.0, 0.0),img_,msg->header.seq);
-	cvPutText(img_,"Robot 2", cvPoint(reprojectedOMNI4_status[0].x-70,reprojectedOMNI4_status[0].y), &font, cvScalar(19.0, 69.0, 139.0));
 	
+	if( (msg->header.seq<1500) || (msg->header.seq>=2871  && msg->header.seq<=2950 ) || (msg->header.seq>=3006  && msg->header.seq<=3750 ) || (msg->header.seq>=3797  && msg->header.seq<=4260) || (msg->header.seq>=5442  && msg->header.seq<=5540 ) || (msg->header.seq>5567))    OverlayGTRobotPose(omniGTPose[i].pose.position.x,omniGTPose[i].pose.position.y,omniGTPose[i].pose.position.z,cvScalar(0.0, 0.0, 0.0),img_,msg->header.seq);
+	cvPutText(img_,"OMNI 2", cvPoint(reprojectedOMNI_status[0].x-70,reprojectedOMNI_status[0].y), &font, cvScalar(19.0, 69.0, 139.0));
       }
       if(i==3)
       {
 	std_msgs::Float32 error_msg;
 	//error_msg.header.stamp = msg->header.stamp;
-	error_msg.data = rms;
+	error_msg.data = error_ecldn;
 	errorPublisherOMNI4.publish(error_msg);
+	
 	if( (msg->header.seq<555) || (msg->header.seq>=564 && msg->header.seq<=1080) || (msg->header.seq>=2314 && msg->header.seq<=3724) || (msg->header.seq>4526))    OverlayGTRobotPose(omniGTPose[i].pose.position.x,omniGTPose[i].pose.position.y,omniGTPose[i].pose.position.z,cvScalar(0.0, 0.0, 0.0),img_,msg->header.seq);
 
-		cvPutText(img_,"Robot 1", cvPoint(reprojectedOMNI4_status[0].x-70,reprojectedOMNI4_status[0].y), &font, cvScalar(147.0, 20.0, 255.0));
+	cvPutText(img_,"OMNI 1", cvPoint(reprojectedOMNI_status[0].x-70,reprojectedOMNI_status[0].y), &font, cvScalar(147.0, 20.0, 255.0));
       }      
       if(i==4)
       {
 	std_msgs::Float32 error_msg;
 	//error_msg.header.stamp = msg->header.stamp;
-	error_msg.data = rms;
+	error_msg.data = error_ecldn;
 	errorPublisherOMNI5.publish(error_msg);
 	
 	if( (msg->header.seq<530) || (msg->header.seq>=1276 && msg->header.seq<=2260) || (msg->header.seq>=3069 && msg->header.seq<=3273) || (msg->header.seq>=3300 && msg->header.seq<=3800) || (msg->header.seq>=4335 && msg->header.seq<=5173) || (msg->header.seq>=5191 && msg->header.seq<=5240) )   		  OverlayGTRobotPose(omniGTPose[i].pose.position.x,omniGTPose[i].pose.position.y,omniGTPose[i].pose.position.z,cvScalar(0.0, 0.0, 0.0),img_,msg->header.seq);
-	cvPutText(img_,"Robot 4", cvPoint(reprojectedOMNI4_status[0].x-70,reprojectedOMNI4_status[0].y), &font, cvScalar(255.0, 50.0, 0.0));
+	cvPutText(img_,"Robot 4", cvPoint(reprojectedOMNI_status[0].x-70,reprojectedOMNI_status[0].y), &font, cvScalar(255.0, 50.0, 0.0));
       }
     }
     
     
   }
   
+  // Overlaying Targets
   for(int i = 0; i<NUM_TARGETS; i++)
   {
-    if(targetActive[i])
-    {
-    
-    OverlayEstimatedTargetPosition(target_state[i].pose.pose.position.x,target_state[i].pose.pose.position.y,targetGTPosition[0].z,color_est[NUM_ROBOTS+i],img_); 
-    if(!(targetGTPosition[0].x==0 && targetGTPosition[0].y==0))
-    OverlayGTTargetPosition(targetGTPosition[0].x,targetGTPosition[0].y,targetGTPosition[0].z,cvScalar(0.0, 0.0, 0.0),img_);
+    if(targetActive[i] || 1) // remove this default true condition if you do not want to display the ball GT if you are not obtaining the estimated ball position and/or not interested
+    {    
+      OverlayEstimatedTargetPosition(target_state[i].pose.pose.position.x,target_state[i].pose.pose.position.y,target_state[i].pose.pose.position.z,color_est[NUM_ROBOTS+i],img_);
+      
+      // The if is to simply remove the GT poses of the ball that are 0,0 (by default 0,0 is uknown GT position!)
+      if(!(targetGTPosition[0].x==0 && targetGTPosition[0].y==0))
+	OverlayGTTargetPosition(targetGTPosition[0].x,targetGTPosition[0].y,targetGTPosition[0].z,cvScalar(0.0, 0.0, 0.0),img_);
     }
   }
   
-  ///@Todo: Do the error analysis here
-  
-  cvShowImage("Grount Truth Images: Right Camera", img_);
-  //if(msg->header.seq>300)
-   //cvSaveImage(imageDestName,img_);
+  cvShowImage("Overlaid Estimates on the Grount Truth Images of Right GT Camera", img_);
   cvReleaseImage(&img_);
 
 }
 
 
-void ImageOverlayer::omniCallback(const evaluate_omni_dataset::RobotState::ConstPtr& msg, IplImage* img_)
+void ImageOverlayer::omniCallback(const read_omni_dataset::RobotState::ConstPtr& msg, IplImage* img_)
 {
+  // Basically switch on all robots, except OMNI2, by default. Then the estimated state for each other is obtained from the corresponding rostopic
   for(int i=0;i<5;i++)
   {
     robotActive[i] = true; 
     robot_state[i] = msg->robotPose[i];
   }
-  robotActive[1] = false;//OMNI2 is absent 
+  robotActive[1] = false;//Recall that OMNI2 is absent 
 }
+
 
 void ImageOverlayer::target1Callback(const read_omni_dataset::BallData::ConstPtr& msg, IplImage* img_)
 {
+  //estimated target state obtained from the corresponding rostopic
   targetActive[0] = true; 
   target_state[0].pose.pose.position.x = msg->x;
   target_state[0].pose.pose.position.y = msg->y;
   target_state[0].pose.pose.position.z = msg->z;
 }
 
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "evaluate_overlay_omni_dataset"); 
   
-    if (argc != 3)
-         {
-            ROS_WARN("WARNING: you should specify camera params folder path and the images folder path (on which GT is overlaid)! which might be %s\n and %s \n, respectively",argv[1], argv[2]);
-         }else{
-             printf("INFO: you have set camera params folder path: %s\n",argv[1]);
-	      printf("INFO: you have set camera images folder path: %s\n",argv[2]);
-         }  
+    if (argc != 2)
+    {
+      ROS_WARN("WARNING: you should specify images folder path (on which GT and estimated poses/positions will be overlaid)! which might be %s\n, respectively",argv[1]);
+    }
+    else
+    {
+      printf("INFO: you have set camera images folder path: %s\n",argv[1]);
+    }  
 
   cvStartWindowThread();
 
-  ImageOverlayer node(argv[1], argv[2]);
+  ImageOverlayer node(argv[1]);
   ros::spin();
   return 0;
-  
 }
