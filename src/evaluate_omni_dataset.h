@@ -109,10 +109,10 @@ class ImageOverlayer
      target1_sub = n.subscribe<read_omni_dataset::BallData>("estimatedOrangeBallState", 1000, boost::bind(&ImageOverlayer::target1Callback,this,_1,&img));
      
      //On these topics the eindividual errors in estimation is published
-     errorPublisherOMNI1 = n.advertise<std_msgs::Float32>("/omni1EstimationError", 1000);
-     errorPublisherOMNI3 = n.advertise<std_msgs::Float32>("/omni3EstimationError", 1000);
-     errorPublisherOMNI4 = n.advertise<std_msgs::Float32>("/omni4EstimationError", 1000);
-     errorPublisherOMNI5 = n.advertise<std_msgs::Float32>("/omni5EstimationError", 1000);
+     errorPublisherOMNI1 = n.advertise<std_msgs::Float32>("/omni1/EstimationError", 1000);
+     errorPublisherOMNI3 = n.advertise<std_msgs::Float32>("/omni3/EstimationError", 1000);
+     errorPublisherOMNI4 = n.advertise<std_msgs::Float32>("/omni4/EstimationError", 1000);
+     errorPublisherOMNI5 = n.advertise<std_msgs::Float32>("/omni5/EstimationError", 1000);
      orangeBallError = n.advertise<std_msgs::Float32>("/OrangeBallEstimationError", 1000);
      
      // Stereo cam calibration. Done only once in the beginning
