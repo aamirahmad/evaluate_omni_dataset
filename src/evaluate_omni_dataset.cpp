@@ -421,6 +421,14 @@ void ImageOverlayer::gtDataCallback(const read_omni_dataset::LRMGTData::ConstPtr
 	OverlayGTTargetPosition(targetGTPosition[0].x,targetGTPosition[0].y,targetGTPosition[0].z,cvScalar(0.0, 0.0, 0.0),img_);
     }
   }
+
+  double errX = fabs(targetGTPosition[0].x-target_state[0].pose.pose.position.x);
+  double errY = fabs(targetGTPosition[0].y-target_state[0].pose.pose.position.y);
+  double errZ = fabs(targetGTPosition[0].z-target_state[0].pose.pose.position.z);
+
+  std_msgs::Float32 error_target;
+  error_target.data = sqrt(errX*errX + errY*errY + errZ*errZ);
+  orangeBallError.publish(error_target);
   
   cvShowImage("Overlaid Estimates on the Grount Truth Images of Right GT Camera", img_);
   cvReleaseImage(&img_);
