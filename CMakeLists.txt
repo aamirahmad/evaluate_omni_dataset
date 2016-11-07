@@ -11,14 +11,11 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs     
   nav_msgs
   rosbag
-  cv_bridge
   message_generation
-  image_transport
   read_omni_dataset
 )
 
-find_package(OpenCV REQUIRED)
-INCLUDE_DIRECTORIES(${catkin_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
+INCLUDE_DIRECTORIES(${catkin_INCLUDE_DIRS})
 
 ## Generate messages in the 'msg' folder
 # add_message_files(
