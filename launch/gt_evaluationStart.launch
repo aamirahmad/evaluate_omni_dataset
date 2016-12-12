@@ -1,3 +1,3 @@
 <launch>
-<node name="evaluate_omni_dataset" pkg="evaluate_omni_dataset" type="evaluate_omni_dataset" args="/home/datasets/omni/Right" output="screen" />
+<node name="evaluate_omni_dataset" pkg="evaluate_omni_dataset" type="evaluate_omni_dataset" args="/home/gsl/datasets/omni/Right/" output="screen" />
 </launch>

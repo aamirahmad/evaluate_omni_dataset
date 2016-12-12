@@ -72,7 +72,7 @@ void EvaluatePFUCLT::omniCallback(
 
   // Copy all information on the robot states
   for (uint r = 0; r < nRobots; ++r)
-    robotStates[r] = msg->robotPose[r].pose.pose;
+    robotStates[r] = msg->robotPose[r].pose;
 }
 
 void EvaluatePFUCLT::target1Callback(
