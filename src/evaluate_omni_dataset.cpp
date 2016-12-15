@@ -44,6 +44,9 @@ void EvaluatePFUCLT::gtDataCallback(
     omniErrorPublishers[r].publish(error_msg);
   }
 
+  if (!targetActive)
+      return;
+
   double errTarX = fabs(targetGTPosition.x - targetState.position.x);
   double errTarY = fabs(targetGTPosition.y - targetState.position.y);
   double errTarZ = fabs(targetGTPosition.z - targetState.position.z);
@@ -79,7 +82,7 @@ void EvaluatePFUCLT::target1Callback(
     const read_omni_dataset::BallData::ConstPtr& msg)
 {
   // estimated target state obtained from the corresponding rostopic
-  targetActive = true;
+  targetActive = msg->found;
   targetState.position.x = msg->x;
   targetState.position.y = msg->y;
   targetState.position.z = msg->z;
