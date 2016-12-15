@@ -26,7 +26,7 @@ class EvaluatePFUCLT
 
   // ROS node specific private stuff
   NodeHandle& nh;
-  Subscriber robotStatesSub, target1_sub;
+  Subscriber robotStatesSub, target1_sub, gtSub;
   std::vector<Publisher> omniErrorPublishers;
   Publisher targetErrorPublisher;
 
@@ -48,20 +48,24 @@ public:
         omniErrorPublishers(nRobots), robotStates(nRobots), omniGTPose(nRobots),
         robotsActive(nRobots, false), omniGTFound(nRobots, false)
   {
+    //Don't change the topic of this subscriber. It is the topic from GT ROSbags.
+    gtSub = nh.subscribe<read_omni_dataset::LRMGTData>("gtData_synced_pfuclt_estimate", 1000, boost::bind(&EvaluatePFUCLT::gtDataCallback,this,_1));
+
+
     // Use your own topic name here for the estimated (from another estimation
     // algorithm) poses of the omnis The idea is to compare (and find the error)
     // these estimated omni poses with the above GT poses. However make sure
     // that the received message is packed according to the custom ROS msg
     // RobotState provided with this package.
     robotStatesSub = nh.subscribe<read_omni_dataset::RobotState>(
-        "estimated_omni_poses", 1000,
+        "/estimated_omni_poses", 1000,
         boost::bind(&EvaluatePFUCLT::omniCallback, this, _1));
 
     // Estimated ball poses: the idea, again, is to compare it with the ball GT
     // poses. Same as robots, you can use your own topic name but the ros msg
     // type should be the custom ROSmsg BallData.
     target1_sub = nh.subscribe<read_omni_dataset::BallData>(
-        "estimatedOrangeBallState", 1000,
+        "/estimatedOrangeBallState", 1000,
         boost::bind(&EvaluatePFUCLT::target1Callback, this, _1));
 
     // On these topics the eindividual errors in estimation is publisher

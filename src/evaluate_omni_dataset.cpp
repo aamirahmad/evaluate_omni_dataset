@@ -87,14 +87,14 @@ void EvaluatePFUCLT::target1Callback(
 
 int main(int argc, char** argv)
 {
-  ros::NodeHandle nh;
   ros::init(argc, argv, "evaluate_omni_dataset");
+  ros::NodeHandle nh;
 
   int nRobots;
 
-  if (!nh.getParam("NUM_ROBOTS", nRobots))
+  if (!nh.getParam("MAX_ROBOTS", nRobots))
   {
-    ROS_ERROR("Couldn't read parameter NUM_ROBOTS");
+    ROS_ERROR("Couldn't read parameter MAX_ROBOTS");
     nh.shutdown();
     exit(EXIT_FAILURE);
   }
