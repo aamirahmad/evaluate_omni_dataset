@@ -1,4 +1,4 @@
-% Record the performance of PF-UCLT on the OMNI-dataset
+% Record the performance of PF-UCLT on the randomly generated OMNI-dataset
 rosshutdown
 rosinit
 
@@ -9,30 +9,19 @@ ptree = rosparam;
 if(~has(ptree, 'MAX_ROBOTS'))
     error('Parameter MAX_ROBOTS not found');
 else
-    maxRobots = get(ptree, 'MAX_ROBOTS');
+    nRobots = get(ptree, 'MAX_ROBOTS');
 end
 
-%Currently not working - MATLAB can't read arrays from parameter server?
-% if(~has(ptree, 'PLAYING_ROBOTS'))
-%     error('Parameter PLAYING_ROBOTS not found');
-% else
-%     playingRobots = get(ptree, 'PLAYING_ROBOTS');
-% end
-playingRobots = [1 0 1 1 1];
-
 % Construct ROS Subscriber objects
-effectiveRobots = sum(playingRobots);
-subscribers = cell(effectiveRobots);
-robotNames = cell(effectiveRobots);
+subscribers = cell(nRobots);
+robotNames = cell(nRobots);
 k = 1;
-legendArr = cell(1, effectiveRobots);
-for i=1:length(playingRobots)
-    if playingRobots(i)
-        robotNames{k} = sprintf('OMNI%d', i);
-        subscribers{k} = rossubscriber(sprintf('omni%d/EstimationError', i));
-        legendArr{k} = sprintf('%s Euclidean Error',robotNames{k}, i);
-        k = k+1;
-    end
+legendArr = cell(1, nRobots);
+for i=1:nRobots
+    robotNames{k} = sprintf('OMNI%d', i);
+    subscribers{k} = rossubscriber(sprintf('omni%d/EstimationError', i));
+    legendArr{k} = sprintf('%s Euclidean Error',robotNames{k}, i);
+    k = k+1;
 end
 
 targetSubscriber = rossubscriber('/OrangeBallEstimationError');
@@ -40,13 +29,16 @@ targetSubscriber = rossubscriber('/OrangeBallEstimationError');
 disp('Press key to begin, then press any key while focusing the figure to end');
 pause;
 
-figure;
+h = figure;
 set(gcf,'currentchar',' ');
 oneArr = zeros(effectiveRobots, 1);
 arrRobots = [];
 arrTarget = [];
 flagFail = false;
+iter = 0;
 while get(gcf,'currentchar')==' '
+    iter = iter + 1;
+    
     % Iterate over subscribers
     flagFail = false;
     for i=1:effectiveRobots
@@ -90,6 +82,7 @@ hold on;
 subplot(2,1,2);
 plot(arrTarget');
 legend('Target Euclidean Error');
+hold off;
 
 means = zeros(1,effectiveRobots);
 medians = zeros(1,effectiveRobots);
