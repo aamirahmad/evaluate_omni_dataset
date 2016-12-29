@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(evaluate_omni_dataset)
+add_definitions(-std=c++11)
 
 find_package(cmake_modules REQUIRED)
 

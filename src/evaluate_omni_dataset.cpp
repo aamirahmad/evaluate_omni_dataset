@@ -42,19 +42,30 @@ void EvaluatePFUCLT::gtDataCallback(
     std_msgs::Float32 error_msg;
     error_msg.data = error_ecldn;
     omniErrorPublishers[r].publish(error_msg);
+
+    // Save to history
+    robotErr_hist[r].push_back((data_t)error_ecldn);
   }
 
   if (!targetActive)
-      return;
+    return;
 
   double errTarX = fabs(targetGTPosition.x - targetState.position.x);
   double errTarY = fabs(targetGTPosition.y - targetState.position.y);
   double errTarZ = fabs(targetGTPosition.z - targetState.position.z);
+  double error_ecldn =
+      pow(errTarX * errTarX + errTarY * errTarY + errTarZ * errTarZ, 0.5);
 
   std_msgs::Float32 error_target;
-  error_target.data =
-      pow(errTarX * errTarX + errTarY * errTarY + errTarZ * errTarZ, 0.5);
+  error_target.data = error_ecldn;
+
   targetErrorPublisher.publish(error_target);
+
+  // Save to history
+  targetSeen_hist.push_back((uint8_t)targetGTPosition.found);
+
+  // Save to history
+  targetErr_hist.push_back((data_t)error_ecldn);
 }
 
 void EvaluatePFUCLT::omniCallback(
@@ -88,14 +99,59 @@ void EvaluatePFUCLT::target1Callback(
   targetState.position.z = msg->z;
 }
 
+void EvaluatePFUCLT::saveHistory(std::string file)
+{
+  std::ofstream Output(file);
+  if (!Output.is_open())
+  {
+    std::cout << "Couldn't open file " << file << std::endl;
+    return;
+  }
+
+  size_t sz = targetSeen_hist.size();
+  bool flag_diffSize = (sz != targetErr_hist.size());
+  for (auto& robot : robotErr_hist)
+    flag_diffSize |= (sz != robot.size());
+
+  std::copy(targetSeen_hist.begin(), targetSeen_hist.end(),
+            std::ostream_iterator<int>(Output, " "));
+  Output << "\n";
+
+  std::copy(targetErr_hist.begin(), targetErr_hist.end(),
+            std::ostream_iterator<data_t>(Output, " "));
+  Output << "\n";
+
+  int nr = robotErr_hist.size();
+  for (int r = 0; r < nr; ++r)
+  {
+    std::copy(robotErr_hist[r].begin(), robotErr_hist[r].end(),
+              std::ostream_iterator<data_t>(Output, " "));
+    Output << "\n";
+  }
+
+  if (flag_diffSize)
+    std::cout << "Beware - different sizes for the history vectors"
+              << std::endl;
+
+  // closed by leaving scope
+}
+
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "evaluate_omni_dataset");
-  ros::NodeHandle nh;
+  ros::NodeHandle nh("~");
 
   int nRobots;
 
-  if (!nh.getParam("MAX_ROBOTS", nRobots))
+  std::string file;
+  if (!nh.getParam("file", file))
+  {
+    ROS_ERROR("Couldn't read parameter file");
+    nh.shutdown();
+    exit(EXIT_FAILURE);
+  }
+
+  if (!nh.getParam("/MAX_ROBOTS", nRobots))
   {
     ROS_ERROR("Couldn't read parameter MAX_ROBOTS");
     nh.shutdown();
@@ -104,7 +160,7 @@ int main(int argc, char** argv)
 
   std::vector<bool> playingRobots(nRobots);
 
-  if (!nh.getParam("PLAYING_ROBOTS", playingRobots))
+  if (!nh.getParam("/PLAYING_ROBOTS", playingRobots))
   {
     ROS_ERROR("Couldn't read parameter PLAYING_ROBOTS");
     nh.shutdown();
@@ -113,6 +169,9 @@ int main(int argc, char** argv)
 
   EvaluatePFUCLT node(nh, nRobots, playingRobots);
   ros::spin();
+
+  // Node shutdown, save history to file
+  node.saveHistory(file);
 
   exit(EXIT_SUCCESS);
 }

@@ -1,26 +1,25 @@
 #include <cstdio>
 #include <iostream>
+#include <algorithm>
+#include <iterator>
+#include <fstream>
 #include <string>
-#include "ros/ros.h"
-#include <rosbag/bag.h>
-#include "std_msgs/String.h"
-#include "std_msgs/Float32.h"
-#include <nav_msgs/Odometry.h>
-#include <tf/transform_broadcaster.h>
+#include <vector>
+#include <ros/ros.h>
+#include <std_msgs/String.h>
+#include <std_msgs/Float32.h>
 #include <read_omni_dataset/BallData.h>
 #include <read_omni_dataset/LRMLandmarksData.h>
 #include <read_omni_dataset/LRMGTData.h>
 #include <read_omni_dataset/RobotState.h>
 
-using namespace std;
 using namespace ros;
-
-// Some fixed omni robot-specific constants
-static const float robRadius = 0.20; // in meters
-static const float robHeight = 0.805; // in meters
 
 class EvaluatePFUCLT
 {
+  typedef double data_t;
+  typedef std::vector<data_t> dataVec_t;
+
   const uint& nRobots;
   const std::vector<bool>& playingRobots;
 
@@ -41,16 +40,24 @@ class EvaluatePFUCLT
   std::vector<bool> omniGTFound;
   read_omni_dataset::BallData targetGTPosition;
 
+  // Error and ball seen history
+  std::vector<uint8_t> targetSeen_hist;
+  dataVec_t targetErr_hist;
+  std::vector<dataVec_t> robotErr_hist;
+
 public:
   EvaluatePFUCLT(ros::NodeHandle& nh, const uint& nRobots,
                  const std::vector<bool>& playingRobots)
       : nh(nh), nRobots(nRobots), playingRobots(playingRobots),
         omniErrorPublishers(nRobots), robotStates(nRobots), omniGTPose(nRobots),
-        robotsActive(nRobots, false), omniGTFound(nRobots, false)
+        robotsActive(nRobots, false), omniGTFound(nRobots, false),
+        robotErr_hist(nRobots)
   {
-    //Don't change the topic of this subscriber. It is the topic from GT ROSbags.
-    gtSub = nh.subscribe<read_omni_dataset::LRMGTData>("gtData_synced_pfuclt_estimate", 1000, boost::bind(&EvaluatePFUCLT::gtDataCallback,this,_1));
-
+    // Don't change the topic of this subscriber. It is the topic from GT
+    // ROSbags.
+    gtSub = nh.subscribe<read_omni_dataset::LRMGTData>(
+        "/gtData_synced_pfuclt_estimate", 1000,
+        boost::bind(&EvaluatePFUCLT::gtDataCallback, this, _1));
 
     // Use your own topic name here for the estimated (from another estimation
     // algorithm) poses of the omnis The idea is to compare (and find the error)
@@ -90,4 +97,7 @@ public:
   /// callback that keeps updating the most recent target pose for target 1
   /// (orange ball) when it receives this info from the omni_g2o_frontend
   void target1Callback(const read_omni_dataset::BallData::ConstPtr&);
+
+  /// save history of desired data to file
+  void saveHistory(std::string file);
 };

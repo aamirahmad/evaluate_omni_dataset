@@ -1,3 +1,8 @@
+<?xml version="1.0" ?>
 <launch>
-<node name="evaluate_omni_dataset" pkg="evaluate_omni_dataset" type="evaluate_omni_dataset" args="/home/gsl/datasets/omni/Right/" output="screen" />
+    <arg name="path" default="$(find evaluate_omni_dataset)/logs"/>
+    <arg name="file" default="new.txt"/>
+    <node name="evaluate_omni_dataset" pkg="evaluate_omni_dataset" type="evaluate_omni_dataset" output="screen">
+        <param name="file" value="$(arg path)/$(arg file)"/>
+    </node>
 </launch>
