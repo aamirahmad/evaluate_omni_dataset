@@ -47,12 +47,9 @@ void EvaluatePFUCLT::gtDataCallback(
     robotErr_hist[r].push_back((data_t)error_ecldn);
   }
 
-  if (!targetActive)
-    return;
-
-  double errTarX = fabs(targetGTPosition.x - targetState.position.x);
-  double errTarY = fabs(targetGTPosition.y - targetState.position.y);
-  double errTarZ = fabs(targetGTPosition.z - targetState.position.z);
+  double errTarX = fabs(targetGTPosition.x - targetState.x);
+  double errTarY = fabs(targetGTPosition.y - targetState.y);
+  double errTarZ = fabs(targetGTPosition.z - targetState.z);
   double error_ecldn =
       pow(errTarX * errTarX + errTarY * errTarY + errTarZ * errTarZ, 0.5);
 
@@ -62,7 +59,7 @@ void EvaluatePFUCLT::gtDataCallback(
   targetErrorPublisher.publish(error_target);
 
   // Save to history
-  targetSeen_hist.push_back((uint8_t)targetGTPosition.found);
+  targetSeen_hist.push_back((uint8_t)targetState.found);
 
   // Save to history
   targetErr_hist.push_back((data_t)error_ecldn);
@@ -94,9 +91,10 @@ void EvaluatePFUCLT::target1Callback(
 {
   // estimated target state obtained from the corresponding rostopic
   targetActive = msg->found;
-  targetState.position.x = msg->x;
-  targetState.position.y = msg->y;
-  targetState.position.z = msg->z;
+  targetState.x = msg->x;
+  targetState.y = msg->y;
+  targetState.z = msg->z;
+  targetState.found = msg->found;
 }
 
 void EvaluatePFUCLT::saveHistory(std::string file)
@@ -113,20 +111,25 @@ void EvaluatePFUCLT::saveHistory(std::string file)
   for (auto& robot : robotErr_hist)
     flag_diffSize |= (sz != robot.size());
 
+  Output << sz << std::endl;
+
   std::copy(targetSeen_hist.begin(), targetSeen_hist.end(),
             std::ostream_iterator<int>(Output, " "));
-  Output << "\n";
+  Output << std::endl;
+  ;
 
   std::copy(targetErr_hist.begin(), targetErr_hist.end(),
             std::ostream_iterator<data_t>(Output, " "));
-  Output << "\n";
+  Output << std::endl;
+  ;
 
   int nr = robotErr_hist.size();
   for (int r = 0; r < nr; ++r)
   {
     std::copy(robotErr_hist[r].begin(), robotErr_hist[r].end(),
               std::ostream_iterator<data_t>(Output, " "));
-    Output << "\n";
+    Output << std::endl;
+    ;
   }
 
   if (flag_diffSize)

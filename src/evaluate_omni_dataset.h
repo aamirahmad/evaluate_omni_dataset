@@ -31,7 +31,7 @@ class EvaluatePFUCLT
 
   // Estimated states
   std::vector<geometry_msgs::Pose> robotStates;
-  geometry_msgs::Pose targetState;
+  read_omni_dataset::BallData targetState;
   std::vector<bool> robotsActive;
   bool targetActive;
 
