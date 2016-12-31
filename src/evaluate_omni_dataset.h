@@ -99,5 +99,5 @@ public:
   void target1Callback(const read_omni_dataset::BallData::ConstPtr&);
 
   /// save history of desired data to file
-  void saveHistory(std::string file);
+  int saveHistory(std::string file);
 };

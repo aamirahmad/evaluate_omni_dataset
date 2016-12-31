@@ -97,13 +97,13 @@ void EvaluatePFUCLT::target1Callback(
   targetState.found = msg->found;
 }
 
-void EvaluatePFUCLT::saveHistory(std::string file)
+int EvaluatePFUCLT::saveHistory(std::string file)
 {
   std::ofstream Output(file);
   if (!Output.is_open())
   {
     std::cout << "Couldn't open file " << file << std::endl;
-    return;
+    return 0;
   }
 
   size_t sz = targetSeen_hist.size();
@@ -116,12 +116,10 @@ void EvaluatePFUCLT::saveHistory(std::string file)
   std::copy(targetSeen_hist.begin(), targetSeen_hist.end(),
             std::ostream_iterator<int>(Output, " "));
   Output << std::endl;
-  ;
 
   std::copy(targetErr_hist.begin(), targetErr_hist.end(),
             std::ostream_iterator<data_t>(Output, " "));
   Output << std::endl;
-  ;
 
   int nr = robotErr_hist.size();
   for (int r = 0; r < nr; ++r)
@@ -129,14 +127,13 @@ void EvaluatePFUCLT::saveHistory(std::string file)
     std::copy(robotErr_hist[r].begin(), robotErr_hist[r].end(),
               std::ostream_iterator<data_t>(Output, " "));
     Output << std::endl;
-    ;
   }
 
   if (flag_diffSize)
-    std::cout << "Beware - different sizes for the history vectors"
-              << std::endl;
+    std::cout << "Different sizes for the history vectors" << std::endl;
 
   // closed by leaving scope
+  return 1;
 }
 
 int main(int argc, char** argv)
@@ -150,31 +147,33 @@ int main(int argc, char** argv)
   if (!nh.getParam("file", file))
   {
     ROS_ERROR("Couldn't read parameter file");
-    nh.shutdown();
-    exit(EXIT_FAILURE);
+    ROS_BREAK();
   }
 
-  if (!nh.getParam("/MAX_ROBOTS", nRobots))
+  while (!nh.hasParam("/MAX_ROBOTS"))
   {
-    ROS_ERROR("Couldn't read parameter MAX_ROBOTS");
-    nh.shutdown();
-    exit(EXIT_FAILURE);
+    ROS_INFO("Waiting for parameter /MAX_ROBOTS, sleeping 1 second");
+    ros::WallDuration(1).sleep();
   }
+
+  nh.getParam("/MAX_ROBOTS", nRobots);
 
   std::vector<bool> playingRobots(nRobots);
 
   if (!nh.getParam("/PLAYING_ROBOTS", playingRobots))
   {
     ROS_ERROR("Couldn't read parameter PLAYING_ROBOTS");
-    nh.shutdown();
-    exit(EXIT_FAILURE);
+    ROS_BREAK();
   }
+
+  ROS_INFO("Starting evaluation for %d robots", nRobots);
 
   EvaluatePFUCLT node(nh, nRobots, playingRobots);
   ros::spin();
 
   // Node shutdown, save history to file
-  node.saveHistory(file);
+  if (node.saveHistory(file))
+    std::cout << "Finished evaluation. Logs written to " << file << std::endl;
 
   exit(EXIT_SUCCESS);
 }
