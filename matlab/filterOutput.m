@@ -1,14 +1,15 @@
-function [ filterIndices ] = filterOutput( targetErrors, targetSeen, minIterationsAfterSeen, minErrorAfterSeen )
+function [ filterIndices ] = filterOutput( targetErrors, targetSeen, makePlots, minIterationsAfterSeen, minErrorAfterSeen )
 %FILTEROUTPUT Filters the input errors
 %   Filters the target errors so that we only count them when the target is
 %   seen for some time. In this case, time is measured as iteration count.
 %   It is also possible to filter according to the value of the estimation
 %   error.
-%   filterIndices = FILTEROUTPUT(targetErrors, targetSeen,
+%   filterIndices = FILTEROUTPUT(targetErrors, targetSeen, makePlots,
 %   minIterationsAfterSeen, minErrorAfterSeen) will filter targetErrors so
 %   that all iterations where target isn't seen are removed in the output
 %   array. The return is a logical array where 1's are the indices that
-%   should be counted after filtering
+%   should be counted after filtering. If makePlots is true, then it will
+%   generate a plot where you can check what happened with filtering.
 %   Additionally, when the target is seen again, it will take
 %   minIterationsAfterSeen until the error is counted, and only after it
 %   goes below the minErrorAfterSeen threshold. minIterationsAfterSeen and
@@ -67,18 +68,22 @@ errNorm = (targetErrors - minim) / range;
 % normalized value of the error crossing
 minErrorNorm = (minErrorAfterSeen - minim) / range;
 
-% plot stuff
-figure;
-plot(1:N, targetSeen, 1:N, filterIndices, 1:N, errNorm);
-hold on;
-if minErrorNorm <= 1
-    line([1, N], [minErrorNorm, minErrorNorm], 'Color', 'g', 'LineStyle', '-', 'LineWidth', 2);
-    legend('targetSeen', 'filterIndices', 'errorNormalized', 'minErrorAfterSeenNorm');
-else
-    legend('targetSeen', 'filterIndices', 'errorNormalized')
+if makePlots
+    % plot stuff
+    figure('units', 'normalized', 'position', [.2 .1 .6 .3]);
+    plot(1:N, targetSeen, 1:N, filterIndices, 1:N, errNorm);
+    hold on;
+    if minErrorNorm <= 1
+        line([1, N], [minErrorNorm, minErrorNorm], 'Color', 'g', 'LineStyle', '-', 'LineWidth', 2);
+        legend('targetSeen', 'filterIndices', 'errorNormalized', 'minErrorAfterSeenNorm');
+    else
+        legend('targetSeen', 'filterIndices', 'errorNormalized')
+    end
+    axis([1, N, -0.1, 1.1]);
+    xlabel('Iteration');
+    ylabel('Euclidean error');
+    hold off;
 end
-axis([1, N, -0.1, 1.1]);
-hold off;
 
 % transform to logical
 filterIndices = logical(filterIndices);

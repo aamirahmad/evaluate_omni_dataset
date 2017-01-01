@@ -26,14 +26,18 @@ function [robotErrors, targetErrors, targetSeen, nRobots, nValues] = readOutput(
         error('Not enough data in the file')
     end
     scan = textscan(line, '%f', nValues);
-    targetErrors = scan{1};
+    scan_arr = scan{1};
+    scan_arr(scan_arr>1000) = 1; % filter some occasional, odd huge values
+    targetErrors = scan_arr;
     
     % read robotErrors array
     robotErrors = [];
     line = fgetl(fid);
     while ischar(line)
         scan = textscan(line, '%f', nValues);
-        robotErrors = [robotErrors scan{1}]; %#ok<AGROW>
+        scan_arr = scan{1};
+        scan_arr(scan_arr>1000) = 1; % filter some occasional, odd huge values
+        robotErrors = [robotErrors scan_arr]; %#ok<AGROW>
         line = fgetl(fid);
     end
     nRobots = size(robotErrors, 2);

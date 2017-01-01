@@ -1,13 +1,26 @@
 % Modify these values according to preference
-file = 'logs/4_robots.txt';
-minIterationsAfterSeen = 100;
-minErrorAfterSeen = 10;
+if ~exist('file', 'var')
+    file= 'logs/2_robots.txt';
+end
+if ~exist('minIterationsAfterSeen', 'var')
+    minIterationsAfterSeen = 100;
+end
+
+if ~exist('minErrorAfterSeen', 'var')
+    minErrorAfterSeen= 1;
+end
+
+if exist('no_aux_plots', 'var')
+    make_plots = ~no_aux_plots;
+else
+    make_plots = true;
+end
 
 % Read and parse output file
 [robotErrors, targetErrors, targetSeen, nRobots, ~] = readOutput(file);
 
 % Filter target errors
-filterIdx = filterOutput(targetErrors, targetSeen, minIterationsAfterSeen, minErrorAfterSeen);
+filterIdx = filterOutput(targetErrors, targetSeen, make_plots, minIterationsAfterSeen, minErrorAfterSeen);
 filteredTargetErrors = targetErrors(filterIdx);
 
 % Run statistics on filtered output
