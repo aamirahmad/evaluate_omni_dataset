@@ -1,7 +1,7 @@
 close all; clear all; clc;
 no_aux_plots = true;
 minErrorAfterSeen = 1;
-minIterationsAfterSeen = 50;
+minIterationsAfterSeen = 100;
 min_robots = 2;
 max_robots = 10;
 num_runs = max_robots-min_robots + 1;
@@ -34,6 +34,7 @@ for stat = 1:num_stats
     scatter(x_arr(:,stat), omni_means(:,stat), 'markeredgecolor', colors(stat));
     hold on;
 end
+set(gca, 'XTick', robots_arr);
 hold off;
 axis([min_robots-0.5, max_robots+0.5, 0, max(omni_means(:))+0.05]);
 lines = lsline;
@@ -41,7 +42,7 @@ for stat = 1:num_stats
     set(lines(stat), 'color', colors(stat));
 end
 legend(legends);
-title({'Self-localization performance', '#particles=#robots*50'});
+title({'Self-localization performance'});
 xlabel('Number of robots');
 ylabel('Error');
 
@@ -50,6 +51,6 @@ subplot(1,2,2);
 scatter(x_arr(:,stat), target_means, 'markeredgecolor', 'g');
 axis([min_robots-0.5, max_robots+0.5, 0, max(target_means)+0.05]);
 lsline;
-title({'Target tracking performance', '#particles=#robots*50'})
+title({'Target tracking performance'})
 xlabel('Number of robots');
 ylabel('Error');
