@@ -13,6 +13,21 @@ void EvaluatePFUCLT::gtDataCallback(
     return;
   }
 
+  // Save to buffer
+  gtBuffer.insertData(*msg);
+}
+
+void EvaluatePFUCLT::computeError()
+{
+  if (gtBuffer.buffer.empty())
+    return;
+
+  // find closest GT data to latest stamp
+  read_omni_dataset::LRMGTData* msg = gtBuffer.closestGT(latestStamp);
+
+  if (!msg)
+    return;
+
   // unpack the message into local variables
   for (uint r = 0; r < nRobots; ++r)
   {
@@ -63,11 +78,16 @@ void EvaluatePFUCLT::gtDataCallback(
 
   // Save to history
   targetErr_hist.push_back((data_t)error_ecldn);
+
+  std::cout << "Difference from GT to estimate = "
+            << latestStamp - msg->header.stamp << std::endl;
 }
 
 void EvaluatePFUCLT::omniCallback(
     const read_omni_dataset::RobotState::ConstPtr& msg)
 {
+  latestStamp = msg->header.stamp;
+
   // Test for errors
   if (msg->robotPose.size() != nRobots)
   {
@@ -84,6 +104,9 @@ void EvaluatePFUCLT::omniCallback(
   // Copy all information on the robot states
   for (uint r = 0; r < nRobots; ++r)
     robotStates[r] = msg->robotPose[r].pose;
+
+  // Compute error after estimate
+  computeError();
 }
 
 void EvaluatePFUCLT::target1Callback(

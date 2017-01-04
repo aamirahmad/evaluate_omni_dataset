@@ -15,6 +15,51 @@
 
 using namespace ros;
 
+struct GTBuffer_s
+{
+  const static size_t bufferSize = 10;
+  typedef read_omni_dataset::LRMGTData gt_t;
+  std::vector<gt_t> buffer;
+
+  GTBuffer_s() : buffer(bufferSize) {}
+
+  void insertData(const read_omni_dataset::LRMGTData gt)
+  {
+    // If full
+    if (buffer.capacity() == buffer.size())
+    {
+      // Erase first element
+      buffer.erase(buffer.begin());
+    }
+
+    // Insert into buffer
+    buffer.push_back(gt);
+  }
+
+  gt_t* closestGT(ros::Time t)
+  {
+    ros::Duration minDiff(100);
+    gt_t* minDiffGT = NULL;
+
+    // Look over the whole vector, find the closest data before time t
+    for (std::vector<gt_t>::iterator it = buffer.begin(); it != buffer.end();
+         ++it)
+    {
+      ros::Duration diff = t - it->header.stamp;
+      if (diff < ros::Duration(0))
+        continue;
+
+      if (diff < minDiff)
+      {
+        minDiff = diff;
+        minDiffGT = &(*it);
+      }
+    }
+
+    return minDiffGT;
+  }
+};
+
 class EvaluatePFUCLT
 {
   typedef double data_t;
@@ -22,6 +67,8 @@ class EvaluatePFUCLT
 
   const uint& nRobots;
   const std::vector<bool>& playingRobots;
+
+  ros::Time latestStamp;
 
   // ROS node specific private stuff
   NodeHandle& nh;
@@ -44,6 +91,9 @@ class EvaluatePFUCLT
   std::vector<uint8_t> targetSeen_hist;
   dataVec_t targetErr_hist;
   std::vector<dataVec_t> robotErr_hist;
+
+  // Buffer of GT data
+  GTBuffer_s gtBuffer;
 
 public:
   EvaluatePFUCLT(ros::NodeHandle& nh, const uint& nRobots,
@@ -100,4 +150,7 @@ public:
 
   /// save history of desired data to file
   int saveHistory(std::string file);
+
+  /// calculate error, save in history and send over ROS
+  void computeError();
 };
