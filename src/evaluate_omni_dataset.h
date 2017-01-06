@@ -28,7 +28,7 @@ struct historyIteration
 
 struct GTBuffer_s
 {
-  const static size_t maxBufferSize = 10;
+  const static size_t maxBufferSize = 50;
   typedef read_omni_dataset::LRMGTData gt_t;
   std::vector<gt_t> buffer;
 
@@ -49,6 +49,8 @@ struct GTBuffer_s
 
   gt_t* closestGT(ros::Time t)
   {
+    //    std::cout << "Given time: " << t << std::endl;
+
     ros::Duration minDiff(100);
     gt_t* minDiffGT = NULL;
 
@@ -57,6 +59,11 @@ struct GTBuffer_s
          ++it)
     {
       ros::Duration diff = t - it->header.stamp;
+
+      //      std::cout << "Buffer time: " << it->header.stamp << " ; diff: " <<
+      //      diff
+      //                << std::endl;
+
       if (diff < ros::Duration(0))
         continue;
 
@@ -66,6 +73,12 @@ struct GTBuffer_s
         minDiffGT = &(*it);
       }
     }
+
+    if (!minDiffGT)
+      return NULL;
+
+    //    std::cout << "Chosen!! time: " << minDiffGT->header.stamp.toNSec()
+    //              << " ; diff: " << minDiff << std::endl;
 
     return minDiffGT;
   }
@@ -111,9 +124,9 @@ public:
         omniErrorPublishers(nRobots), robotStates(nRobots), omniGTPose(nRobots),
         robotsActive(nRobots, false), omniGTFound(nRobots, false), hist(0)
   {
-    // Don't change the topic of this subscriber. It is the topic from pfuclt
+    // Don't change the topic of this subscriber. It is the topic from rosbag
     gtSub = nh.subscribe<read_omni_dataset::LRMGTData>(
-        "/gtData_synced_pfuclt_estimate", 1000,
+        "/gtData", 1000,
         boost::bind(&EvaluatePFUCLT::gtDataCallback, this, _1));
 
     estimateSub = nh.subscribe<read_omni_dataset::Estimate>(
