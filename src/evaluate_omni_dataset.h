@@ -12,21 +12,32 @@
 #include <read_omni_dataset/LRMLandmarksData.h>
 #include <read_omni_dataset/LRMGTData.h>
 #include <read_omni_dataset/RobotState.h>
+#include <read_omni_dataset/Estimate.h>
 
 using namespace ros;
 
+struct historyIteration
+{
+  bool filterConverged;
+  float computationTime;
+  bool targetSeen;
+  std::vector<double> robotErrors;
+  double targetError;
+  std::vector<bool> targetVisibility;
+};
+
 struct GTBuffer_s
 {
-  const static size_t bufferSize = 10;
+  const static size_t maxBufferSize = 10;
   typedef read_omni_dataset::LRMGTData gt_t;
   std::vector<gt_t> buffer;
 
-  GTBuffer_s() : buffer(bufferSize) {}
+  GTBuffer_s() : buffer(0) {}
 
   void insertData(const read_omni_dataset::LRMGTData gt)
   {
     // If full
-    if (buffer.capacity() == buffer.size())
+    if (maxBufferSize == buffer.size())
     {
       // Erase first element
       buffer.erase(buffer.begin());
@@ -65,14 +76,14 @@ class EvaluatePFUCLT
   typedef double data_t;
   typedef std::vector<data_t> dataVec_t;
 
-  const uint& nRobots;
+  const int nRobots;
   const std::vector<bool>& playingRobots;
 
   ros::Time latestStamp;
 
   // ROS node specific private stuff
   NodeHandle& nh;
-  Subscriber robotStatesSub, target1_sub, gtSub;
+  Subscriber estimateSub, gtSub;
   std::vector<Publisher> omniErrorPublishers;
   Publisher targetErrorPublisher;
 
@@ -87,10 +98,8 @@ class EvaluatePFUCLT
   std::vector<bool> omniGTFound;
   read_omni_dataset::BallData targetGTPosition;
 
-  // Error and ball seen history
-  std::vector<uint8_t> targetSeen_hist;
-  dataVec_t targetErr_hist;
-  std::vector<dataVec_t> robotErr_hist;
+  // History of iteration information
+  std::vector<historyIteration> hist;
 
   // Buffer of GT data
   GTBuffer_s gtBuffer;
@@ -100,30 +109,16 @@ public:
                  const std::vector<bool>& playingRobots)
       : nh(nh), nRobots(nRobots), playingRobots(playingRobots),
         omniErrorPublishers(nRobots), robotStates(nRobots), omniGTPose(nRobots),
-        robotsActive(nRobots, false), omniGTFound(nRobots, false),
-        robotErr_hist(nRobots)
+        robotsActive(nRobots, false), omniGTFound(nRobots, false), hist(0)
   {
-    // Don't change the topic of this subscriber. It is the topic from GT
-    // ROSbags.
+    // Don't change the topic of this subscriber. It is the topic from pfuclt
     gtSub = nh.subscribe<read_omni_dataset::LRMGTData>(
         "/gtData_synced_pfuclt_estimate", 1000,
         boost::bind(&EvaluatePFUCLT::gtDataCallback, this, _1));
 
-    // Use your own topic name here for the estimated (from another estimation
-    // algorithm) poses of the omnis The idea is to compare (and find the error)
-    // these estimated omni poses with the above GT poses. However make sure
-    // that the received message is packed according to the custom ROS msg
-    // RobotState provided with this package.
-    robotStatesSub = nh.subscribe<read_omni_dataset::RobotState>(
-        "/estimated_omni_poses", 1000,
-        boost::bind(&EvaluatePFUCLT::omniCallback, this, _1));
-
-    // Estimated ball poses: the idea, again, is to compare it with the ball GT
-    // poses. Same as robots, you can use your own topic name but the ros msg
-    // type should be the custom ROSmsg BallData.
-    target1_sub = nh.subscribe<read_omni_dataset::BallData>(
-        "/estimatedOrangeBallState", 1000,
-        boost::bind(&EvaluatePFUCLT::target1Callback, this, _1));
+    estimateSub = nh.subscribe<read_omni_dataset::Estimate>(
+        "/pfuclt_estimate", 100,
+        boost::bind(&EvaluatePFUCLT::estimateCallback, this, _1));
 
     // On these topics the eindividual errors in estimation is publisher
     for (uint r = 0; r < nRobots; ++r)
@@ -140,17 +135,9 @@ public:
   /// whenever a new GT message is received from the bag
   void gtDataCallback(const read_omni_dataset::LRMGTData::ConstPtr&);
 
-  /// callback that keeps updating the most recent robot poses for omnis when it
-  /// receives this info from the omni_g2o_frontend
-  void omniCallback(const read_omni_dataset::RobotState::ConstPtr&);
-
-  /// callback that keeps updating the most recent target pose for target 1
-  /// (orange ball) when it receives this info from the omni_g2o_frontend
-  void target1Callback(const read_omni_dataset::BallData::ConstPtr&);
+  // estimate callback
+  void estimateCallback(const read_omni_dataset::Estimate::ConstPtr&);
 
   /// save history of desired data to file
   int saveHistory(std::string file);
-
-  /// calculate error, save in history and send over ROS
-  void computeError();
 };

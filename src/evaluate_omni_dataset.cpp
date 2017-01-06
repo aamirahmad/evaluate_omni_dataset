@@ -7,7 +7,7 @@ void EvaluatePFUCLT::gtDataCallback(
   if (msg->poseOMNI.size() != nRobots || msg->foundOMNI.size() != nRobots)
   {
     ROS_FATAL("Size of read_omni_dataset::LRMGTData vectors was different from "
-              "the NUM_ROBOTS parameter %d",
+              "the MAX_ROBOTS parameter %d",
               nRobots);
     nh.shutdown();
     return;
@@ -17,25 +17,59 @@ void EvaluatePFUCLT::gtDataCallback(
   gtBuffer.insertData(*msg);
 }
 
-void EvaluatePFUCLT::computeError()
+void EvaluatePFUCLT::estimateCallback(
+    const read_omni_dataset::Estimate::ConstPtr& msg)
 {
+  latestStamp = msg->header.stamp;
+
+  // Test for errors
+  if (msg->robotEstimates.size() != nRobots)
+  {
+    ROS_FATAL("Size of read_omni_dataset::Estimate.robotEstimates vector %d is "
+              "different from the MAX_ROBOTS parameter %d",
+              (int)msg->robotEstimates.size(), nRobots);
+    nh.shutdown();
+    return;
+  }
+
+  // At this time turn on all the robots that are "playing"
+  robotsActive = playingRobots;
+
+  // Copy all information on the robot states
+  for (uint r = 0; r < nRobots; ++r)
+    robotStates[r] = msg->robotEstimates[r];
+
+  // Estimated target state
+  targetActive = msg->targetEstimate.found;
+  targetState.x = msg->targetEstimate.x;
+  targetState.y = msg->targetEstimate.y;
+  targetState.z = msg->targetEstimate.z;
+  targetState.found = msg->targetEstimate.found;
+
+  // ----------------------
+  // Begin error evaluation
+  // ----------------------
+
   if (gtBuffer.buffer.empty())
     return;
 
   // find closest GT data to latest stamp
-  read_omni_dataset::LRMGTData* msg = gtBuffer.closestGT(latestStamp);
+  read_omni_dataset::LRMGTData* msgGT = gtBuffer.closestGT(latestStamp);
 
-  if (!msg)
-    return;
+  if (!msgGT)
+    msgGT = &gtBuffer.buffer.back();
 
   // unpack the message into local variables
   for (uint r = 0; r < nRobots; ++r)
   {
-    omniGTPose[r] = msg->poseOMNI[r].pose;
-    omniGTFound[r] = msg->foundOMNI[r];
+    omniGTPose[r] = msgGT->poseOMNI[r].pose;
+    omniGTFound[r] = msgGT->foundOMNI[r];
   }
 
-  targetGTPosition = msg->orangeBall3DGTposition;
+  targetGTPosition = msgGT->orangeBall3DGTposition;
+
+  // Begin new iteration for history
+  historyIteration iterHist;
 
   // Publish all related errors
   for (int r = 0; r < nRobots; ++r)
@@ -47,19 +81,13 @@ void EvaluatePFUCLT::computeError()
     double errorY = fabs(omniGTPose[r].position.y - robotStates[r].position.y);
     double error_ecldn = pow(errorX * errorX + errorY * errorY, 0.5);
 
-    ///@INFO For each robot below, the error gets published. However, as the GT
-    /// positions are not present for many time chunks due to occlusions from
-    /// the
-    /// GT cameras , we manually/visually inspected each GT image and the
-    /// positions and noted the image intervas where the GT is absent. Hence,
-    /// the
-    /// magic numbers below!
     std_msgs::Float32 error_msg;
     error_msg.data = error_ecldn;
     omniErrorPublishers[r].publish(error_msg);
 
     // Save to history
-    robotErr_hist[r].push_back((data_t)error_ecldn);
+    iterHist.robotErrors.push_back((double)error_ecldn);
+    iterHist.targetVisibility.push_back((uint8_t)msg->targetVisibility[r]);
   }
 
   double errTarX = fabs(targetGTPosition.x - targetState.x);
@@ -74,50 +102,19 @@ void EvaluatePFUCLT::computeError()
   targetErrorPublisher.publish(error_target);
 
   // Save to history
-  targetSeen_hist.push_back((uint8_t)targetState.found);
+  iterHist.targetSeen = ((uint8_t)targetState.found);
 
   // Save to history
-  targetErr_hist.push_back((data_t)error_ecldn);
+  iterHist.targetError = ((double)error_ecldn);
 
   std::cout << "Difference from GT to estimate = "
-            << latestStamp - msg->header.stamp << std::endl;
-}
+            << latestStamp - msgGT->header.stamp << std::endl;
 
-void EvaluatePFUCLT::omniCallback(
-    const read_omni_dataset::RobotState::ConstPtr& msg)
-{
-  latestStamp = msg->header.stamp;
+  // Save to history
+  iterHist.computationTime = msg->computationTime;
+  iterHist.filterConverged = msg->converged;
 
-  // Test for errors
-  if (msg->robotPose.size() != nRobots)
-  {
-    ROS_FATAL("Size of read_omni_dataset::RobotState robot vector %d is "
-              "different from the NUM_ROBOTS parameter %d",
-              (int)msg->robotPose.size(), nRobots);
-    nh.shutdown();
-    return;
-  }
-
-  // At this time turn on all the robots that are "playing"
-  robotsActive = playingRobots;
-
-  // Copy all information on the robot states
-  for (uint r = 0; r < nRobots; ++r)
-    robotStates[r] = msg->robotPose[r].pose;
-
-  // Compute error after estimate
-  computeError();
-}
-
-void EvaluatePFUCLT::target1Callback(
-    const read_omni_dataset::BallData::ConstPtr& msg)
-{
-  // estimated target state obtained from the corresponding rostopic
-  targetActive = msg->found;
-  targetState.x = msg->x;
-  targetState.y = msg->y;
-  targetState.z = msg->z;
-  targetState.found = msg->found;
+  hist.push_back(iterHist);
 }
 
 int EvaluatePFUCLT::saveHistory(std::string file)
@@ -129,31 +126,46 @@ int EvaluatePFUCLT::saveHistory(std::string file)
     return 0;
   }
 
-  size_t sz = targetSeen_hist.size();
-  bool flag_diffSize = (sz != targetErr_hist.size());
-  for (auto& robot : robotErr_hist)
-    flag_diffSize |= (sz != robot.size());
+  size_t iters = hist.size();
+  // Write number of iterations to first line
+  Output << iters << std::endl;
 
-  Output << sz << std::endl;
+  // Write number of robots to second line
+  Output << nRobots << std::endl;
 
-  std::copy(targetSeen_hist.begin(), targetSeen_hist.end(),
-            std::ostream_iterator<int>(Output, " "));
-  Output << std::endl;
-
-  std::copy(targetErr_hist.begin(), targetErr_hist.end(),
-            std::ostream_iterator<data_t>(Output, " "));
-  Output << std::endl;
-
-  int nr = robotErr_hist.size();
-  for (int r = 0; r < nr; ++r)
+  // Begin loop for iterations, in every line we will write the info for 1
+  // iteration
+  for (uint32_t i = 0; i < iters; ++i)
   {
-    std::copy(robotErr_hist[r].begin(), robotErr_hist[r].end(),
-              std::ostream_iterator<data_t>(Output, " "));
+    historyIteration& iter = hist[i];
+
+    // First write if filter is converged
+    Output << iter.filterConverged;
+
+    // Second write the computation time
+    Output << " " << iter.computationTime;
+
+    // Third write the state of global target visibility
+    Output << " " << iter.targetSeen;
+
+    // Fourth write every robot error
+    for (uint r = 0; r < iter.robotErrors.size(); ++r)
+    {
+      Output << " " << iter.robotErrors[r];
+    }
+
+    // Fifth write the target error
+    Output << " " << iter.targetError;
+
+    // Sixth write individual target visibility
+    for (uint r = 0; r < iter.targetVisibility.size(); ++r)
+    {
+      Output << " " << iter.targetVisibility[r];
+    }
+
+    // Go to next line
     Output << std::endl;
   }
-
-  if (flag_diffSize)
-    std::cout << "Different sizes for the history vectors" << std::endl;
 
   // closed by leaving scope
   return 1;
