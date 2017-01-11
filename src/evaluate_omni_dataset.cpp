@@ -54,19 +54,21 @@ void EvaluatePFUCLT::estimateCallback(
     return;
 
   // find closest GT data to latest stamp
-  read_omni_dataset::LRMGTData* msgGT = gtBuffer.closestGT(latestStamp);
+  GTBuffer_s::bufferData_s* buffDataPtr = gtBuffer.closestGT(latestStamp);
 
-  if (!msgGT)
-    msgGT = &gtBuffer.buffer.back();
+  if (!buffDataPtr)
+    buffDataPtr = &gtBuffer.buffer.back();
+
+  read_omni_dataset::LRMGTData& msgGT = buffDataPtr->gt;
 
   // unpack the message into local variables
   for (uint r = 0; r < nRobots; ++r)
   {
-    omniGTPose[r] = msgGT->poseOMNI[r].pose;
-    omniGTFound[r] = msgGT->foundOMNI[r];
+    omniGTPose[r] = msgGT.poseOMNI[r].pose;
+    omniGTFound[r] = msgGT.foundOMNI[r];
   }
 
-  targetGTPosition = msgGT->orangeBall3DGTposition;
+  targetGTPosition = msgGT.orangeBall3DGTposition;
 
   // Begin new iteration for history
   historyIteration iterHist;
@@ -88,6 +90,7 @@ void EvaluatePFUCLT::estimateCallback(
     // Save to history
     iterHist.robotErrors.push_back((double)error_ecldn);
     iterHist.targetVisibility.push_back((uint8_t)msg->targetVisibility[r]);
+    iterHist.targetObsNoises.push_back((float)buffDataPtr->targetObsNoises[r]);
   }
 
   double errTarX = fabs(targetGTPosition.x - targetState.x);
@@ -108,13 +111,19 @@ void EvaluatePFUCLT::estimateCallback(
   iterHist.targetError = ((double)error_ecldn);
 
   std::cout << "Difference from GT to estimate = "
-            << latestStamp - msgGT->header.stamp << std::endl;
+            << latestStamp - msgGT.header.stamp << std::endl;
 
   // Save to history
   iterHist.computationTime = msg->computationTime;
   iterHist.filterConverged = msg->converged;
 
   hist.push_back(iterHist);
+}
+
+void EvaluatePFUCLT::targetObsNoisesCallback(
+    const std_msgs::Float32::ConstPtr& noise, uint robot)
+{
+  gtBuffer.insertData(noise->data, robot);
 }
 
 int EvaluatePFUCLT::saveHistory(std::string file)
@@ -161,6 +170,12 @@ int EvaluatePFUCLT::saveHistory(std::string file)
     for (uint r = 0; r < iter.targetVisibility.size(); ++r)
     {
       Output << " " << iter.targetVisibility[r];
+    }
+
+    // Seventh write individual target obs noise
+    for (uint r = 0; r < nRobots; ++r)
+    {
+      Output << " " << iter.targetObsNoises[r];
     }
 
     // Go to next line
