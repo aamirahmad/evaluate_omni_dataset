@@ -64,6 +64,10 @@ struct GTBuffer_s
 
   void insertData(const float noise, const uint robotNumber)
   {
+    // If buffer empty, return
+    if(buffer.empty())
+      return ;
+
     // Insert noise into latest GT
     bufferData_s& back = buffer.back();
     back.targetObsNoises[robotNumber] = noise;
