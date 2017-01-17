@@ -3,16 +3,7 @@
 void EvaluatePFUCLT::gtDataCallback(
     const read_omni_dataset::LRMGTData::ConstPtr& msg)
 {
-  // Test for errors
-  if (msg->poseOMNI.size() != nRobots || msg->foundOMNI.size() != nRobots)
-  {
-    ROS_FATAL("Size of read_omni_dataset::LRMGTData vectors was different from "
-              "the MAX_ROBOTS parameter %d",
-              nRobots);
-    nh.shutdown();
-    return;
-  }
-
+  targetActive = msg->orangeBall3DGTposition.found;
   // Save to buffer
   gtBuffer.insertData(*msg);
 }
@@ -40,7 +31,6 @@ void EvaluatePFUCLT::estimateCallback(
     robotStates[r] = msg->robotEstimates[r];
 
   // Estimated target state
-  targetActive = msg->targetEstimate.found;
   targetState.x = msg->targetEstimate.x;
   targetState.y = msg->targetEstimate.y;
   targetState.z = msg->targetEstimate.z;
@@ -62,10 +52,35 @@ void EvaluatePFUCLT::estimateCallback(
   read_omni_dataset::LRMGTData& msgGT = buffDataPtr->gt;
 
   // unpack the message into local variables
-  for (uint r = 0; r < nRobots; ++r)
+  for (int r = 0; r < nRobots; ++r)
   {
-    omniGTPose[r] = msgGT.poseOMNI[r].pose;
-    omniGTFound[r] = msgGT.foundOMNI[r];
+    if (!robotsActive[r])
+    {
+      continue;
+    }
+
+    switch (r)
+    {
+    case 0:
+      omniGTPose[r] = msgGT.poseOMNI1.pose;
+      omniGTFound[r] = msgGT.foundOMNI1;
+      break;
+
+    case 2:
+      omniGTPose[r] = msgGT.poseOMNI3.pose;
+      omniGTFound[r] = msgGT.foundOMNI3;
+      break;
+
+    case 3:
+      omniGTPose[r] = msgGT.poseOMNI4.pose;
+      omniGTFound[r] = msgGT.foundOMNI4;
+      break;
+
+    case 4:
+      omniGTPose[r] = msgGT.poseOMNI5.pose;
+      omniGTFound[r] = msgGT.foundOMNI5;
+      break;
+    }
   }
 
   targetGTPosition = msgGT.orangeBall3DGTposition;
@@ -73,11 +88,19 @@ void EvaluatePFUCLT::estimateCallback(
   // Begin new iteration for history
   historyIteration iterHist;
 
+  iterHist.msgSeq = msgGT.header.seq;
+  iterHist.targetFoundGT = msgGT.orangeBall3DGTposition.found;
+  iterHist.omniGTfound = omniGTFound;
+
   // Publish all related errors
   for (int r = 0; r < nRobots; ++r)
   {
-    if (!robotsActive[r] || !omniGTFound[r])
+    if (!robotsActive[r])
+    {
+      iterHist.robotErrors.push_back(0);
+      iterHist.targetVisibility.push_back(0);
       continue;
+    }
 
     double errorX = fabs(omniGTPose[r].position.x - robotStates[r].position.x);
     double errorY = fabs(omniGTPose[r].position.y - robotStates[r].position.y);
@@ -90,7 +113,6 @@ void EvaluatePFUCLT::estimateCallback(
     // Save to history
     iterHist.robotErrors.push_back((double)error_ecldn);
     iterHist.targetVisibility.push_back((uint8_t)msg->targetVisibility[r]);
-    iterHist.targetObsNoises.push_back((float)buffDataPtr->targetObsNoises[r]);
   }
 
   double errTarX = fabs(targetGTPosition.x - targetState.x);
@@ -120,12 +142,6 @@ void EvaluatePFUCLT::estimateCallback(
   hist.push_back(iterHist);
 }
 
-void EvaluatePFUCLT::targetObsNoisesCallback(
-    const std_msgs::Float32::ConstPtr& noise, uint robot)
-{
-  gtBuffer.insertData(noise->data, robot);
-}
-
 int EvaluatePFUCLT::saveHistory(std::string file)
 {
   std::ofstream Output(file);
@@ -140,7 +156,9 @@ int EvaluatePFUCLT::saveHistory(std::string file)
   Output << iters << std::endl;
 
   // Write number of robots to second line
-  Output << nRobots << std::endl;
+  uint nRobotsInactive =
+      std::count(robotsActive.begin(), robotsActive.end(), 0);
+  Output << nRobots - nRobotsInactive << std::endl;
 
   // Begin loop for iterations, in every line we will write the info for 1
   // iteration
@@ -154,12 +172,60 @@ int EvaluatePFUCLT::saveHistory(std::string file)
     // Second write the computation time
     Output << " " << iter.computationTime;
 
-    // Third write the state of global target visibility
-    Output << " " << iter.targetSeen;
+    // Third write the state of global target visibility (only 1 if found by GT
+    // and robots)
+    Output << " " << iter.targetSeen&& iter.targetFoundGT;
 
     // Fourth write every robot error
-    for (uint r = 0; r < iter.robotErrors.size(); ++r)
+    for (uint r = 0; r < nRobots; ++r)
     {
+      if (!robotsActive[r])
+        continue;
+
+      else if (!iter.omniGTfound[r])
+      {
+        iter.robotErrors[r] = NAN;
+      }
+
+      // Check some bad GT values - write NaN so that we can filter later
+      else if (r == 0)
+      {
+        if (!((iter.msgSeq < 1570) ||
+              (iter.msgSeq >= 1607 && iter.msgSeq <= 2870) ||
+              (iter.msgSeq >= 3336 && iter.msgSeq <= 3800) ||
+              (iter.msgSeq >= 3816 && iter.msgSeq <= 5030) ||
+              (iter.msgSeq >= 5197 && iter.msgSeq <= 5870)))
+          iter.robotErrors[r] = NAN;
+      }
+      else if (r == 2)
+      {
+        if (!((iter.msgSeq < 1500) ||
+              (iter.msgSeq >= 2871 && iter.msgSeq <= 2950) ||
+              (iter.msgSeq >= 3006 && iter.msgSeq <= 3750) ||
+              (iter.msgSeq >= 3797 && iter.msgSeq <= 4260) ||
+              (iter.msgSeq >= 5442 && iter.msgSeq <= 5540) ||
+              (iter.msgSeq > 5567)))
+          iter.robotErrors[r] = NAN;
+      }
+      else if (r == 3)
+      {
+        if (!((iter.msgSeq < 555) ||
+              (iter.msgSeq >= 564 && iter.msgSeq <= 1080) ||
+              (iter.msgSeq >= 2314 && iter.msgSeq <= 3724) ||
+              (iter.msgSeq > 4526)))
+          iter.robotErrors[r] = NAN;
+      }
+      else if (r == 4)
+      {
+        if (!((iter.msgSeq < 530) ||
+              (iter.msgSeq >= 1276 && iter.msgSeq <= 2260) ||
+              (iter.msgSeq >= 3069 && iter.msgSeq <= 3273) ||
+              (iter.msgSeq >= 3300 && iter.msgSeq <= 3800) ||
+              (iter.msgSeq >= 4335 && iter.msgSeq <= 5173) ||
+              (iter.msgSeq >= 5191 && iter.msgSeq <= 5240)))
+          iter.robotErrors[r] = NAN;
+      }
+
       Output << " " << iter.robotErrors[r];
     }
 
@@ -167,15 +233,12 @@ int EvaluatePFUCLT::saveHistory(std::string file)
     Output << " " << iter.targetError;
 
     // Sixth write individual target visibility
-    for (uint r = 0; r < iter.targetVisibility.size(); ++r)
-    {
-      Output << " " << iter.targetVisibility[r];
-    }
-
-    // Seventh write individual target obs noise
     for (uint r = 0; r < nRobots; ++r)
     {
-      Output << " " << iter.targetObsNoises[r];
+      if (!robotsActive[r])
+        continue;
+
+      Output << " " << iter.targetVisibility[r];
     }
 
     // Go to next line
@@ -216,7 +279,9 @@ int main(int argc, char** argv)
     ROS_BREAK();
   }
 
-  ROS_INFO("Starting evaluation for %d robots", nRobots);
+  ROS_INFO(
+      "Starting evaluation for max %d robots (there may be inactive robots)",
+      nRobots);
 
   EvaluatePFUCLT node(nh, nRobots, playingRobots);
   ros::spin();

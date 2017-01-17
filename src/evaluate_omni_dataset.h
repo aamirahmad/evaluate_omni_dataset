@@ -24,7 +24,9 @@ struct historyIteration
   std::vector<double> robotErrors;
   double targetError;
   std::vector<bool> targetVisibility;
-  std::vector<float> targetObsNoises;
+  uint msgSeq;
+  bool targetFoundGT;
+  std::vector<bool> omniGTfound;
 };
 
 struct GTBuffer_s
@@ -35,7 +37,6 @@ struct GTBuffer_s
   struct bufferData_s
   {
     gt_t gt;
-    std::vector<float> targetObsNoises;
   };
 
   std::vector<bufferData_s> buffer;
@@ -54,23 +55,8 @@ struct GTBuffer_s
     // Create struct and insert into buffer
     // Copy latest noises in case no new noises are available for this GT
     bufferData_s data;
-    if(!buffer.empty())
-      data.targetObsNoises = buffer.back().targetObsNoises;
-    else
-      data.targetObsNoises = std::vector<float>(nRobots, 0.0);
     data.gt = gt;
     buffer.push_back(data);
-  }
-
-  void insertData(const float noise, const uint robotNumber)
-  {
-    // If buffer empty, return
-    if(buffer.empty())
-      return ;
-
-    // Insert noise into latest GT
-    bufferData_s& back = buffer.back();
-    back.targetObsNoises[robotNumber] = noise;
   }
 
   bufferData_s* closestGT(ros::Time t)
@@ -123,7 +109,6 @@ class EvaluatePFUCLT
   // ROS node specific private stuff
   NodeHandle& nh;
   Subscriber estimateSub, gtSub;
-  std::vector<Subscriber> targetObsNoiseSubscribers;
   std::vector<Publisher> omniErrorPublishers;
   Publisher targetErrorPublisher;
 
@@ -150,11 +135,11 @@ public:
     : nh(nh), nRobots(nRobots), playingRobots(playingRobots),
       omniErrorPublishers(nRobots), robotStates(nRobots), omniGTPose(nRobots),
       robotsActive(nRobots, false), omniGTFound(nRobots, false), hist(0),
-      gtBuffer(nRobots), targetObsNoiseSubscribers(nRobots)
+      gtBuffer(nRobots)
   {
     // Don't change the topic of this subscriber. It is the topic from rosbag
     gtSub = nh.subscribe<read_omni_dataset::LRMGTData>(
-          "/gtData", 1000,
+          "/gtData_4robotExp", 1000,
           boost::bind(&EvaluatePFUCLT::gtDataCallback, this, _1));
 
     estimateSub = nh.subscribe<read_omni_dataset::Estimate>(
@@ -168,10 +153,6 @@ public:
             "/omni" + boost::lexical_cast<std::string>(r + 1) +
             "/EstimationError",
             1000);
-
-      targetObsNoiseSubscribers[r] = nh.subscribe<std_msgs::Float32>(
-            "/omni" + boost::lexical_cast<std::string>(r + 1) + "/targetObsNoise", 5,
-            boost::bind(&EvaluatePFUCLT::targetObsNoisesCallback, this, _1, r));
     }
 
     targetErrorPublisher =
@@ -184,9 +165,6 @@ public:
 
   // estimate callback
   void estimateCallback(const read_omni_dataset::Estimate::ConstPtr&);
-
-  // target obs noises callback
-  void targetObsNoisesCallback(const std_msgs::Float32::ConstPtr&, uint robot);
 
   /// save history of desired data to file
   int saveHistory(std::string file);
